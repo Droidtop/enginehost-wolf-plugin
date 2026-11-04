@@ -2,7 +2,7 @@
 
 Sources: djytw/wolf-rpg-formats (Kaitai specs, MIT) [V], elizagamedev/wolftrans's notes on 2.x
 [V], Sinflower/UberWolf's readers for 3.x [V]; the official runtime still to be checked
-(static pass). Numbers are little-endian.
+(the local lane's static pass). Numbers are little-endian.
 
 ## Strings
 A u32 byte length including the terminating NUL, then the bytes. Shift-JIS in 2.x; UTF-8 in 3.x

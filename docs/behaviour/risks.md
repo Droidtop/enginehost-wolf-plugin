@@ -1,8 +1,7 @@
 # Risks
 
 Every runtime behaviour that could be abused, and the core's answer (Enginehost docs/SPEC.md,
-"Cores we write from scratch", step 2). Filled from the static pass (`tools/static/`) and the
-survey. Status today: candidates from memory, none confirmed.
+"Cores we write from scratch", step 2). Filled from a local lane's static pass and the survey. Status today: candidates from memory, none confirmed.
 
 | Behaviour | Seen | Core's answer |
 |---|---|---|

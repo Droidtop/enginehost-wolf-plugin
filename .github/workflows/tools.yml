@@ -1,6 +1,6 @@
 name: Tools
 
-# The survey tool's unit tests and a syntax check of the static-pass script. Runs on every
+# The survey tool's unit tests. Runs on every
 # branch: these are plain Python and need no Android toolchain.
 on:
   push:
@@ -18,5 +18,3 @@ jobs:
           persist-credentials: false
       - name: Survey tool tests
         run: python3 -m unittest discover -s tools/survey -v
-      - name: Static-pass script compiles
-        run: python3 -m py_compile tools/static/wolf_static.py

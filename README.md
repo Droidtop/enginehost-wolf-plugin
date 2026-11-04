@@ -14,8 +14,6 @@ the two and is the only branch that builds a bundle.
 - `tools/survey/wolf_survey.py`: scans a folder of games in place and reports engine versions,
   packed or unpacked data, Pro games, and how often each event command is used. It writes only
   its report. Tests: `python3 -m unittest discover -s tools/survey`.
-- `tools/static/wolf_static.py`: a Ghidra headless script that inventories an official runtime's
-  imports, strings and risky call sites (`tools/static/README.md`).
 - `docs/behaviour/`: the behaviour descriptions the core is written from, and the risk list.
 
 ## What it reads
