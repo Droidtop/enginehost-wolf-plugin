@@ -11,8 +11,8 @@ files whose header marker byte is 0x55 [V].
 ## Version markers
 CommonEvent.dat and the database files start `00 57 00 00 4F 4C` then a marker byte (0x00 for
 2.x, 0x55 for 3.x) [V]. Footers: 0xC2 (2.x), 0xC3 (3.0), 0xC4 (3.3) [V]. Maps start with ten
-zero bytes and `WOLFM\0`; their version byte is 0x65 (2.x) or 0x66 (3.x) [V], and from 3.5 a
-newer version (>= 0x67) may be LZ4-compressed [V].
+zero bytes and `WOLFM\0`; their version is 0x65 (2.x) or 0x66 (3.x) [V], and from 3.5 a
+newer version (>= 0x67) may be LZ4-compressed [V]; "Maps (.mps)" has the whole layout.
 
 ## Event commands
 A command list is a u32 count followed by that many commands [V]. One command:
@@ -117,3 +117,73 @@ counts: a project with more field or row names than the `.dat` holds keeps only 
 **Variable counts** (how many normal, string and system variables a game has) are not in
 Game.dat, and the reference keeps them unbounded. Where the runtime takes them from is
 Unknown; the core uses fixed defaults until it is read.
+
+## Maps (.mps)
+[R] as above, and [V] where marked. Loaded by `core/src/wolf_map.c`.
+
+**Head.** A file whose byte 1 is 0x50 is Pro-protected and refused. Otherwise the file starts
+with a 20-byte magic: ten zero bytes, `WOLFM\0`, four zero bytes, where the first of those four
+is 0x55 in a UTF-8 map (the text encoding, as in "Strings"). There is no indicator byte. The
+file's last byte is always 0x66. After the magic: u32 version; a u8 (meaning Unknown).
+
+**Packing.** The sources disagree: the reference unpacks every map from version 0x65 on, while
+the local lane saw plain 0x65 and 0x66 maps and LZ4 only from 0x67 [V]. So the body is taken as
+packed (u32 unpacked size, u32 packed size, an LZ4 block that ends the file, as in "Reading the
+project files") when the version is at least 0x65 and the packed size is exactly the bytes
+left after those two words; otherwise it is read plain. Which versions really pack is
+**Unknown**; a plain body whose first eight bytes happen to look like that would be misread
+(and then refused, since the LZ4 block must produce a well-formed body).
+
+**Body**, in order:
+- text: Unknown; s32 tileset number; s32 width; s32 height (in tiles); u32 event count;
+- from version 0x67: s32 Unknown, then s32 layer count; before it, 3 layers;
+- the tiles: layer count x height x width s32, layer by layer, row by row. In a UTF-8 map an
+  s32 of -1 in their place means the map stores no tiles (the -1 is consumed). A map whose
+  first tile really is -1 cannot be told from that; whether it can exist is Unknown;
+- the events, each starting with 0x6F, then 0x66, and nothing after it. The number of events
+  must equal the count.
+
+Negative sizes are refused; the loader also caps width and height at 100,000, layers at 64,
+events at 100,000, pages per event at 10,000 and route steps at 100,000 (our caps, not the
+editor's).
+
+**Tile values.** From 100,000 on, an autotile: value / 100,000 is its autotile slot plus one,
+and value % 100,000 is four decimal digits, one per corner (top left, top right, bottom left,
+bottom right), choosing each quarter's shape. Below 100,000, a chip of the tileset's base
+sheet, 8 chips to a row. How the corner digits map to pieces of the autotile image is Unknown
+here (the renderer is not built).
+
+**One event:** `39 30 00 00`; s32 id; text name; s32 x; s32 y; u32 page count; four zero
+bytes; the pages, each starting with 0x79; then 0x70. The number of pages must equal the
+count. The id picks the event's self-variable slots: a thread started on one of its pages reads
+1,100,000 + X as that event's self variable X (commands.md, "Call values"). The loader does not
+require ids to be in order or unique; whether the editor ever writes them otherwise is Unknown.
+
+**One page:**
+- s32 Unknown; text graphic (a file name, possibly empty);
+- u8 direction (the sheet row is direction / 2 - 1), u8 frame, u8 opacity, u8 blend mode;
+- u8 trigger: 0 when the hero checks it, 1 automatic, 2 parallel, 3 hero touch, 4 event touch;
+- four conditions as four bytes, then four s32 variables, then four s32 values. In each byte
+  bit 0 says the condition is used (an unused one still holds a variable, typically
+  1,000,000) and the high 4 bits are the comparison, numbered as the command comparisons are;
+  the other low bits are Unknown. How the four combine, and which page an event shows
+  when several qualify, are Unknown here; page choice is not built;
+- u8 animation speed, u8 move speed, u8 move frequency, u8 move type (0 none, 1 custom route,
+  2 random, 3 toward the hero), u8 options (0x01 idle animation, 0x02 move animation, 0x04
+  fixed direction, 0x08 passes through, 0x10 above the hero, 0x20 square hit box, 0x40 half a
+  tile up, 0x80 half a tile left), u8 route options (bits Unknown);
+- u32 route step count, then the steps, each `u8 id, u8 argc, argc x s32, 01 00` (the same
+  steps as a command's move route in "Event commands");
+- the page's command list, as in "Event commands"; from version 0x67 every command carries the
+  3.5+ trailing byte list ("CommonEvent.dat");
+- s32 features (meaning Unknown beyond the next point); u8 shadow; u8 contact range x; u8
+  contact range y; only when features is more than 3, a u8 (the reference calls it transfer;
+  meaning Unknown);
+- 0x7A.
+
+**Running pages.** A loaded map widens the VM's self-variable slots to its highest event id
+(`wolf_map_config`) and can start any page's list on a thread with that event's self variables
+(`wolf_map_start_page`). Starting automatic and parallel pages when a map is entered, and
+whether self variables reset when the map changes, are Unknown and not built.
+
+**Not read yet:** TileSetData.dat (tilesets: their images and passability) and MapTree.dat.

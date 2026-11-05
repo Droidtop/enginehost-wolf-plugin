@@ -158,5 +158,6 @@ case, optionally an else marker, and a branch end; each case's commands sit one 
 ## Not built yet
 
 Messages and choices (101, 102), pictures (150), sound (140), databases (250), 211 (reserved
-calls), map event pages, string arguments, and everything that draws or reads input. A command
+calls), choosing and starting map event pages (maps load: formats.md, "Maps (.mps)"), string
+arguments, and everything that draws or reads input. A command
 with no handler is logged once and skipped (above).
