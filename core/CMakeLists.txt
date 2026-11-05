@@ -6,7 +6,8 @@ project(enginehost_wolf_core C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-add_library(wolfcore STATIC src/dxa.c src/wolf_cmd.c src/vm.c)
+add_library(wolfcore STATIC src/dxa.c src/wolf_cmd.c src/vm.c src/values.c src/calc.c src/flow.c)
+target_link_libraries(wolfcore PRIVATE m)
 target_include_directories(wolfcore PUBLIC src)
 target_compile_options(wolfcore PRIVATE -Wall -Wextra -Werror)
 
