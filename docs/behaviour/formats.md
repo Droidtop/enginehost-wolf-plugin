@@ -34,6 +34,6 @@ Whether every list ends with the blank command (code 0) is not confirmed [M]; th
 counts strictly first and flags files it had to count loosely.
 
 ## Archives (.wolf)
-DX Library archives, one fixed key per engine era (Enginehost docs/new-engines/wolf.md has the
-table) [V]. The core reads unpacked data, 2.x archives and 3.x archives on the engine's fixed key;
-it refuses Pro and protect-key games [the owner's rule, #858].
+Wolf 3.x archives are DX Library archives, version 8; archive.md describes them. The key string is
+derived from the game when an archive is opened and never stored (the owner's rule, #858). Pro and
+protect-key games are refused.
