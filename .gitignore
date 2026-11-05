@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+wolf-survey.json
+build/
+.gradle/
+.cxx/
+local.properties

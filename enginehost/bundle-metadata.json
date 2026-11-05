@@ -1,0 +1,28 @@
+{
+  "bundleId": "dev.enginehost.wolf.v1",
+  "engine": "wolfrpg",
+  "pluginVersion": "0.1.0",
+  "apiVersion": 1,
+  "entrypoint": "dev.enginehost.plugin.wolf.WolfPlugin",
+  "origin": "https://github.com/droidtop/enginehost-wolf-plugin",
+  "isolatable": true,
+  "writesGameFolder": false,
+  "dexFiles": [
+    "classes.dex"
+  ],
+  "capabilities": [
+    {
+      "id": "wolfrpg-v1-experimental",
+      "engineContext": "wolf",
+      "runtimeVersion": "1.0",
+      "acceptsAnyEngineVersion": true
+    }
+  ],
+  "source": {
+    "upstream": "https://github.com/droidtop/enginehost-wolf-plugin",
+    "revision": "plugin/0.1"
+  },
+  "licenses": [
+    "GPL-3.0 (the Wolf core and its wrapper); games are not redistributed"
+  ]
+}
