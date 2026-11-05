@@ -9,6 +9,9 @@
 #define DB_FIELDS_MAX 10000u
 #define DB_ROWS_MAX 1000000u
 #define SELF_NAMES 100u
+#define TILESETS_MAX 10000u
+#define AUTOTILES_MAX 256u
+#define MAP_TREE_MAX 100000u
 
 static int fail_code(const wolf_reader *r, int fallback) { return r->failed ? WOLF_READ_E_FORMAT : fallback; }
 
@@ -405,4 +408,113 @@ void wolf_game_config(const wolf_game *g, wolf_config *cfg) {
     cfg->system_strings = 10000u;
     cfg->map_events = 10000u;
     cfg->seed = 1u;
+}
+
+/* ---- TileSetData.dat --------------------------------------------------------------------- */
+
+#define TILESET_SEPARATOR 0xFF
+#define TILESETS_END 0xCF
+
+static void free_tileset(wolf_tileset *s) {
+    free(s->name);
+    free(s->base);
+    if (s->autotiles)
+        for (uint32_t i = 0; i < s->nautotiles; i++) free(s->autotiles[i]);
+    free(s->autotiles);
+    free(s->tags);
+    free(s->flags);
+}
+
+void wolf_tilesets_free(wolf_tilesets *t) {
+    if (t->sets)
+        for (uint32_t i = 0; i < t->count; i++) free_tileset(&t->sets[i]);
+    free(t->sets);
+    memset(t, 0, sizeof *t);
+}
+
+static int read_tileset(wolf_reader *r, wolf_tileset *s) {
+    s->name = wolf_read_text(r, NULL);
+    s->base = wolf_read_text(r, NULL);
+    if (r->failed) return WOLF_READ_E_FORMAT;
+    /* The autotile sheets have no count: they run up to the separator (a text's length word
+     * never starts with 0xFF, since no text is that long). */
+    s->autotiles = calloc(AUTOTILES_MAX, sizeof(char *));
+    if (!s->autotiles) return WOLF_READ_E_NOMEM;
+    while (r->at < r->n && r->p[r->at] != TILESET_SEPARATOR) {
+        if (s->nautotiles == AUTOTILES_MAX) return WOLF_READ_E_FORMAT;
+        char *name = wolf_read_text(r, NULL);
+        if (!name) return WOLF_READ_E_FORMAT;
+        s->autotiles[s->nautotiles++] = name;
+    }
+    wolf_expect_u8(r, TILESET_SEPARATOR);
+    s->nchips = wolf_read_count(r, WOLF_READ_LIST_MAX, 1);
+    const uint8_t *tags = wolf_read_bytes(r, s->nchips);
+    wolf_expect_u8(r, TILESET_SEPARATOR);
+    uint32_t nflags = wolf_read_count(r, WOLF_READ_LIST_MAX, 4);
+    if (r->failed || !tags || nflags != s->nchips) return WOLF_READ_E_FORMAT;
+    s->tags = malloc(s->nchips + 1u);
+    s->flags = calloc(s->nchips + 1u, sizeof(uint32_t));
+    if (!s->tags || !s->flags) return WOLF_READ_E_NOMEM;
+    memcpy(s->tags, tags, s->nchips);
+    for (uint32_t i = 0; i < s->nchips; i++) s->flags[i] = wolf_read_u32(r);
+    return fail_code(r, WOLF_READ_OK);
+}
+
+int wolf_tilesets_load(const uint8_t *p, size_t n, wolf_tilesets *out) {
+    memset(out, 0, sizeof *out);
+    wolf_reader r;
+    wolf_reader_init(&r, p, n);
+    int res = wolf_read_head(&r, DB_MAGIC, sizeof DB_MAGIC, 5, &out->utf8);
+    if (res) return res;
+    out->version = wolf_read_u8(&r);
+    /* each tileset is at least two texts (5 bytes each), two separators and two counts */
+    uint32_t count = wolf_read_count(&r, TILESETS_MAX, 20);
+    if (r.failed) return WOLF_READ_E_FORMAT;
+    out->sets = calloc(count + 1u, sizeof *out->sets);
+    if (!out->sets) return WOLF_READ_E_NOMEM;
+    out->count = count;
+    for (uint32_t i = 0; i < count; i++) {
+        res = read_tileset(&r, &out->sets[i]);
+        if (res) break;
+    }
+    if (!res) {
+        wolf_expect_u8(&r, TILESETS_END);
+        res = r.failed || r.at != r.n ? WOLF_READ_E_FORMAT : WOLF_READ_OK;
+    }
+    if (res) wolf_tilesets_free(out);
+    return res;
+}
+
+/* ---- MapTree.dat ------------------------------------------------------------------------- */
+
+#define MAP_TREE_HEAD 10
+#define MAP_TREE_END 0xBC
+
+void wolf_map_tree_free(wolf_map_tree *t) {
+    free(t->entries);
+    memset(t, 0, sizeof *t);
+}
+
+int wolf_map_tree_load(const uint8_t *p, size_t n, wolf_map_tree *out) {
+    memset(out, 0, sizeof *out);
+    if (n >= 2 && p[1] == 0x50) return WOLF_READ_E_PROTECTED; /* as every other file: formats.md */
+    wolf_reader r;
+    wolf_reader_init(&r, p, n);
+    wolf_read_bytes(&r, MAP_TREE_HEAD); /* meaning Unknown */
+    out->version = wolf_read_u8(&r);
+    uint32_t count = wolf_read_count(&r, MAP_TREE_MAX, 8);
+    if (r.failed) return WOLF_READ_E_FORMAT;
+    out->entries = calloc(count + 1u, sizeof *out->entries);
+    if (!out->entries) return WOLF_READ_E_NOMEM;
+    out->count = count;
+    for (uint32_t i = 0; i < count; i++) {
+        out->entries[i].parent = wolf_read_s32(&r);
+        out->entries[i].map = wolf_read_s32(&r);
+    }
+    wolf_expect_u8(&r, MAP_TREE_END);
+    if (r.failed || r.at != r.n) {
+        wolf_map_tree_free(out);
+        return WOLF_READ_E_FORMAT;
+    }
+    return WOLF_READ_OK;
 }

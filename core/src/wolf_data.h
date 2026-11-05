@@ -104,6 +104,57 @@ void wolf_game_screen(const wolf_game *g, uint32_t *width, uint32_t *height);
  * runtime takes them from is Unknown (formats.md), so they are fixed defaults for now. */
 void wolf_game_config(const wolf_game *g, wolf_config *cfg);
 
+/* ---- TileSetData.dat --------------------------------------------------------------------- */
+
+/* A base chip's flags (formats.md, "TileSetData.dat"). */
+enum {
+    WOLF_CHIP_NOT_DOWN = 0x01,
+    WOLF_CHIP_NOT_LEFT = 0x02,
+    WOLF_CHIP_NOT_RIGHT = 0x04,
+    WOLF_CHIP_NOT_UP = 0x08,
+    WOLF_CHIP_ABOVE = 0x10,       /* drawn above characters */
+    WOLF_CHIP_HALF_CLEAR = 0x40,  /* a character on it has its lower half see-through */
+    WOLF_CHIP_COUNTER = 0x80,
+    WOLF_CHIP_HIDES = 0x100,      /* passable; hides a character behind it */
+    WOLF_CHIP_AS_BELOW = 0x200,   /* passability follows the layer below */
+};
+
+typedef struct {
+    char *name;
+    char *base;          /* the base chip sheet's file name */
+    uint32_t nautotiles;
+    char **autotiles;    /* the autotile sheets' file names, slot 1 first */
+    uint32_t nchips;
+    uint8_t *tags;       /* per base chip */
+    uint32_t *flags;     /* per base chip, WOLF_CHIP_* */
+} wolf_tileset;
+
+typedef struct {
+    int utf8;
+    uint32_t version;
+    uint32_t count;
+    wolf_tileset *sets;
+} wolf_tilesets;
+
+int wolf_tilesets_load(const uint8_t *p, size_t n, wolf_tilesets *out);
+void wolf_tilesets_free(wolf_tilesets *t);
+
+/* ---- MapTree.dat ------------------------------------------------------------------------- */
+
+typedef struct {
+    int32_t parent; /* -1 at the root */
+    int32_t map;
+} wolf_map_tree_entry;
+
+typedef struct {
+    uint32_t version;
+    uint32_t count;
+    wolf_map_tree_entry *entries; /* in the editor's display order */
+} wolf_map_tree;
+
+int wolf_map_tree_load(const uint8_t *p, size_t n, wolf_map_tree *out);
+void wolf_map_tree_free(wolf_map_tree *t);
+
 #ifdef __cplusplus
 }
 #endif

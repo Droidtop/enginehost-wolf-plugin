@@ -42,6 +42,21 @@ static wolf_call *top(wolf_thread *t) { return &t->stack[t->depth - 1]; }
 
 /* ---- conditions ------------------------------------------------------------------------------ */
 
+int wolf_compare(wolf_vm *vm, int32_t left, int32_t right, uint32_t op) {
+    switch (op) {
+    case 0: return left > right;
+    case 1: return left >= right;
+    case 2: return left == right;
+    case 3: return left <= right;
+    case 4: return left < right;
+    case 5: return left != right;
+    case 6: return (left & right) != 0;
+    default:
+        wolf_once(vm, ONCE_BAD_ARGS, "a condition uses comparison %u, which is not known; false", op);
+        return 0;
+    }
+}
+
 /*
  * After a condition command: walks its case markers in order and stops in the body of the first
  * case whose test passes, else in the else body if there is one, else past the branch end.
@@ -65,19 +80,7 @@ static int number_case(wolf_vm *vm, const wolf_thread *t, const wolf_cmd *c, uin
     if (which >= cases || base + 2 >= c->nint) return 0;
     int32_t left = wolf_value(vm, t, c->ints[base]);
     int32_t right = wolf_value(vm, t, c->ints[base + 1]);
-    switch (c->ints[base + 2] & 0xFF) {
-    case 0: return left > right;
-    case 1: return left >= right;
-    case 2: return left == right;
-    case 3: return left <= right;
-    case 4: return left < right;
-    case 5: return left != right;
-    case 6: return (left & right) != 0;
-    default:
-        wolf_once(vm, ONCE_BAD_ARGS, "a command 111 uses comparison %d, which is not known; false",
-                  (int)(c->ints[base + 2] & 0xFF));
-        return 0;
-    }
+    return wolf_compare(vm, left, right, (uint32_t)c->ints[base + 2] & 0xFF);
 }
 
 int wolf_h_if_number(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c) {

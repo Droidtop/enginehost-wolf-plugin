@@ -166,8 +166,7 @@ require ids to be in order or unique; whether the editor ever writes them otherw
 - four conditions as four bytes, then four s32 variables, then four s32 values. In each byte
   bit 0 says the condition is used (an unused one still holds a variable, typically
   1,000,000) and the high 4 bits are the comparison, numbered as the command comparisons are;
-  the other low bits are Unknown. How the four combine, and which page an event shows
-  when several qualify, are Unknown here; page choice is not built;
+  the other low bits are Unknown. How they decide the page an event shows is maps.md;
 - u8 animation speed, u8 move speed, u8 move frequency, u8 move type (0 none, 1 custom route,
   2 random, 3 toward the hero), u8 options (0x01 idle animation, 0x02 move animation, 0x04
   fixed direction, 0x08 passes through, 0x10 above the hero, 0x20 square hit box, 0x40 half a
@@ -183,7 +182,35 @@ require ids to be in order or unique; whether the editor ever writes them otherw
 
 **Running pages.** A loaded map widens the VM's self-variable slots to its highest event id
 (`wolf_map_config`) and can start any page's list on a thread with that event's self variables
-(`wolf_map_start_page`). Starting automatic and parallel pages when a map is entered, and
-whether self variables reset when the map changes, are Unknown and not built.
+(`wolf_map_start_page`). Choosing pages and running the automatic and parallel ones is maps.md.
 
-**Not read yet:** TileSetData.dat (tilesets: their images and passability) and MapTree.dat.
+## TileSetData.dat
+[R] as above. Loaded by `wolf_tilesets_load` (`core/src/wolf_data.c`).
+
+The envelope and magic of a database file (`W 00 00 O L 00 F M 00`, the UTF-8 marker 0x55 at the
+magic's sixth byte), then a u8 version and a u32 tileset count. Each tileset:
+- text name; text base chip sheet (a file name);
+- the autotile sheets: texts, with no count, up to a 0xFF byte. A text's length word cannot
+  start with 0xFF (no text is that long), so the byte is unambiguous. The reference expects 15
+  in a 2.x file and 31 in a 3.x one; the loader takes up to 256 (our cap) and checks no number;
+- 0xFF; a byte list: one tag number per base chip;
+- 0xFF; a u32 count, which must equal the tag count, then a u32 of flags per base chip.
+
+Then 0xCF, which ends the file. Chip flags [R]: 0x01, 0x02, 0x04, 0x08 the hero cannot leave
+downward, left, right, up (all four: impassable); 0x10 drawn above characters; 0x40 a
+character on it has its lower half see-through; 0x80 counter; 0x100 passable but hides a
+character behind it; 0x200 passability follows the layer below. Other bits are kept, meaning
+Unknown. How an autotile's passability is stored is Unknown here (not in these flags).
+**Unknown:** whether a 3.5+ TileSetData.dat is ever LZ4-packed like the other files; the
+reference reads it plain, and so does the loader (a packed one would be refused as malformed).
+Caps: 10,000 tilesets, 256 autotile sheets each (ours).
+
+## MapTree.dat
+[R] as above. Loaded by `wolf_map_tree_load` (`core/src/wolf_data.c`).
+
+Ten bytes whose meaning is Unknown (not checked), a u8 version, a u32 entry count, then per
+entry an s32 parent map (-1 at the root) and an s32 map number, in the order the editor lists
+maps; then 0xBC, which ends the file. A map number indexes the system database's map settings
+type, which names the .mps file [R]; the loader does not follow that link. No envelope byte is
+read; a file whose byte 1 is 0x50 is still refused as Pro-protected, as every other file is
+[M: that the rule reaches this file is our assumption]. Cap: 100,000 entries (ours).

@@ -50,6 +50,10 @@ int32_t wolf_value(wolf_vm *vm, const wolf_thread *t, int32_t v);
  * variable or a normal variable (manual, 計算式の説明). */
 int wolf_is_plain(int32_t v);
 
+/* A number comparison, numbered as command 111 and map page conditions number them
+ * (commands.md); an unknown one is false and logged once. */
+int wolf_compare(wolf_vm *vm, int32_t left, int32_t right, uint32_t op);
+
 /* Handlers, by file. */
 int wolf_h_set_variable(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);   /* 121 */
 int wolf_h_if_number(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);      /* 111 */
