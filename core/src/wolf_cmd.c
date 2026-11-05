@@ -37,7 +37,7 @@ typedef struct {
 } totals;
 
 /* One pass over the list. With out == NULL it only checks and counts; otherwise it fills. */
-static int walk(cursor *c, uint32_t count, totals *t, wolf_list *out, int32_t *ints, wolf_str *strs,
+static int walk(cursor *c, uint32_t count, int extras, totals *t, wolf_list *out, int32_t *ints, wolf_str *strs,
                 char *text, wolf_route *routes, uint8_t *route_bytes) {
     size_t ni = 0, ns = 0, nt = 0, nr = 0, nb = 0;
     for (uint32_t k = 0; k < count; k++) {
@@ -102,6 +102,11 @@ static int walk(cursor *c, uint32_t count, totals *t, wolf_list *out, int32_t *i
         } else if (tail != 0) {
             return WOLF_LIST_E_FORMAT;
         }
+        if (extras) { /* 3.5+: a byte count and that many bytes, meaning unknown (formats.md) */
+            uint32_t en;
+            const uint8_t *b;
+            if (u8(c, &en) || take(c, en, &b)) return WOLF_LIST_E_FORMAT;
+        }
     }
     if (t) {
         t->ints = ni; t->strs = ns; t->text = nt; t->routes = nr; t->route_bytes = nb;
@@ -109,7 +114,7 @@ static int walk(cursor *c, uint32_t count, totals *t, wolf_list *out, int32_t *i
     return WOLF_LIST_OK;
 }
 
-int wolf_list_parse(const uint8_t *p, size_t n, size_t *used, wolf_list *out) {
+int wolf_list_parse_ex(const uint8_t *p, size_t n, int extras, size_t *used, wolf_list *out) {
     memset(out, 0, sizeof *out);
     *used = 0;
     if (n > LIST_BYTES_MAX) n = LIST_BYTES_MAX;
@@ -121,7 +126,7 @@ int wolf_list_parse(const uint8_t *p, size_t n, size_t *used, wolf_list *out) {
     if ((size_t)count > (n - c.at) / 8) return WOLF_LIST_E_FORMAT;
     totals t;
     cursor first = c;
-    int r = walk(&first, count, &t, NULL, NULL, NULL, NULL, NULL, NULL);
+    int r = walk(&first, count, extras, &t, NULL, NULL, NULL, NULL, NULL, NULL);
     if (r) return r;
     size_t bytes = (size_t)count * sizeof(wolf_cmd) + t.ints * sizeof(int32_t) + t.strs * sizeof(wolf_str) +
                    t.routes * sizeof(wolf_route) + t.text + t.route_bytes + 16;
@@ -137,10 +142,14 @@ int wolf_list_parse(const uint8_t *p, size_t n, size_t *used, wolf_list *out) {
     out->cmds = cmds;
     out->count = count;
     out->storage = mem;
-    r = walk(&c, count, NULL, out, ints, strs, text, routes, route_bytes);
+    r = walk(&c, count, extras, NULL, out, ints, strs, text, routes, route_bytes);
     if (r) { wolf_list_free(out); return r; }
     *used = c.at;
     return WOLF_LIST_OK;
+}
+
+int wolf_list_parse(const uint8_t *p, size_t n, size_t *used, wolf_list *out) {
+    return wolf_list_parse_ex(p, n, 0, used, out);
 }
 
 void wolf_list_free(wolf_list *l) {

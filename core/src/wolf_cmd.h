@@ -49,6 +49,9 @@ enum {
 /* Parses one command list (u32 count, then the commands) at the start of p[0..n).
  * *used is set to the bytes it took. The list owns copies of everything it points to. */
 int wolf_list_parse(const uint8_t *p, size_t n, size_t *used, wolf_list *out);
+/* The same, for 3.5+ files when extras is non-zero: every command then ends with a byte count
+ * and that many bytes (formats.md, "CommonEvent.dat"), checked and skipped. */
+int wolf_list_parse_ex(const uint8_t *p, size_t n, int extras, size_t *used, wolf_list *out);
 void wolf_list_free(wolf_list *l);
 
 #ifdef __cplusplus

@@ -37,3 +37,83 @@ counts strictly first and flags files it had to count loosely.
 Wolf 3.x archives are DX Library archives, version 8; archive.md describes them. The key string is
 derived from the game when an archive is opened and never stored (the owner's rule, #858). Pro and
 protect-key games are refused.
+
+## Reading the project files (shared by every section below)
+[R] rpg-maker-clone 75b1c34 (`mruby-wolf/mrblib`, MIT), read only, never built, run or copied;
+it was itself checked against the editor's bundled sample game. The editor's terms of use (9.1)
+allow analysing these files' formats; Pro-protected data (9.2) is excluded and refused here.
+
+- Integers are 32-bit little-endian; "count" fields are unsigned and every one is bounded.
+- **Text:** a u32 byte length that counts the terminating NUL (so at least 1), then the bytes;
+  the last byte must be 0. Shift-JIS or UTF-8 by the file's marker, as in "Strings".
+- **Text list:** u32 count, then that many texts. **Number list:** u32 count, then s32 each.
+  **Byte list:** u32 count, then one byte each.
+- **Envelope:** byte 0 is an indicator, 0 for a plain file. A file whose byte 1 is 0x50 is
+  Pro-protected and is refused. A plain file has its magic right after the indicator.
+  A 2.x Game.dat or database .dat with a non-zero indicator is scrambled by the editor's
+  optional 2.x scrambler; it is **refused** here for now (owner to decide; the reference
+  reads it).
+- **Packed body (3.5+):** after the version byte, a u32 unpacked size, a u32 packed size,
+  then one LZ4 *block* (no frame header) of exactly that packed size, ending the file. The
+  rest of the file is read from the unpacked bytes.
+
+## CommonEvent.dat
+[R] as above.
+
+| Part | Layout |
+|---|---|
+| head | indicator 0; magic `57 00 00 4F 4C m 46 43 00` where m is 0x00 (Shift-JIS) or 0x55 (UTF-8); version byte |
+| packed | version 0x93 or 0xCC: the body is packed (above), and every command carries a trailing byte list (below) |
+| body | u32 event count, the events, a footer byte (at least 0x89), and nothing after it |
+
+One common event, in order:
+- 0x8E; u32 number; a byte whose low 4 bits are the run condition (0 called only, 1 automatic,
+  2 parallel, 3 parallel always) and high 4 bits the condition's operator; s32 condition
+  variable; s32 condition value; u8 number-argument count; u8 string-argument count;
+- text: name; the command list (as in "Event commands"); text: Unknown; text: memo;
+- 0x8F; text list: argument names; byte list: argument kinds; u32 n then n text lists
+  (argument choices); u32 n then n number lists (choice values); number list: argument
+  defaults;
+- 0x90; s32 colour; 100 texts: the self variables' names;
+- 0x91; text: Unknown; then either 0x91 (end), or 0x92, text: the return value's name, s32: the
+  self variable (0-99) returned to a caller, and 0x92.
+
+In packed files every command ends with one more byte, a count n, then n bytes (meaning
+Unknown). Events are numbered by their place in the file; whether the stored number can differ
+from the place is Unknown (the reference indexes by place).
+
+## Databases (DataBase, CDataBase, SysDataBase)
+[R] as above. Each is a `.project` (the schema) and a `.dat` (the values).
+
+`.project`: u32 type count, then per type:
+- text: name; u32 n then n texts (field names); u32 n then n texts (row names); text: memo;
+- byte list: each field's kind (0 number, 1 file name, 2 database reference, 3 choices);
+- u32 n then n texts; u32 n then n text lists; u32 n then n number lists (each field's extra
+  strings, choices and values); u32 n then n s32 (each field's default);
+- nothing after the last type.
+
+`.dat`: indicator 0; magic `57 00 00 4F 4C m 46 4D 00`; version byte (0xC4: packed body).
+Then u32 type count (the project's), then per type:
+- `FE FF FF FF`; s32 how row numbers are set (meaning Unknown); u32 field count;
+- per field a u32 position: 1000 x block + slot, block 1 a number, 2 a text;
+- u32 row count; per row, one s32 per number field, then one text per text field.
+
+Then a footer byte equal to the version, and nothing after (in a packed `.dat` the footer is
+the last byte of the unpacked body). The `.dat` is authoritative on
+counts: a project with more field or row names than the `.dat` holds keeps only those it has.
+
+## Game.dat
+[R] as above.
+
+- indicator 0; magic `57 00 00 4F 4C 00 46 4D`; version byte, 0x55 for UTF-8;
+- byte list: settings (0 tile size, 1 and 2 character directions, 4 frames per second,
+  5 shadows, 7 animation patterns, 8 movement width, ... Unknown beyond these);
+- text list: 0 the game's title, 1 always "0000-0000", 3 the font, 4-6 sub-fonts,
+  7 the hero's graphic, 8 the subtitle; others Unknown;
+- s32 file size; s32 Unknown; u32 n then n u16 settings (16 screen width, 17 height,
+  18 the editor version; 0 width or height means 320 x 240);
+- any remaining bytes: Unknown, not read.
+
+**Variable counts** (how many normal, string and system variables a game has) are not in
+Game.dat, and the reference keeps them unbounded. Where the runtime takes them from is
+Unknown; the core uses fixed defaults until it is read.
