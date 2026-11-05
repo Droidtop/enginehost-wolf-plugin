@@ -1,7 +1,7 @@
 name: Tools
 
-# The survey tool's unit tests. Runs on every
-# branch: these are plain Python and need no Android toolchain.
+# The survey tool's unit tests and the core's native tests. Runs on every branch: neither
+# needs an Android toolchain.
 on:
   push:
   pull_request:
@@ -18,3 +18,18 @@ jobs:
           persist-credentials: false
       - name: Survey tool tests
         run: python3 -m unittest discover -s tools/survey -v
+
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      # The archive reader takes untrusted input, so its tests (including the mutation pass)
+      # run under the address and undefined-behaviour sanitizers.
+      - name: Core tests (sanitized)
+        run: |
+          cmake -S core -B build -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer"
+          cmake --build build
+          ctest --test-dir build --output-on-failure
