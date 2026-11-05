@@ -1,0 +1,13 @@
+{
+  "description": "Runs WOLF RPG Editor games with Enginehost's own interpreter, in its isolated runtime",
+  "engine": "wolfrpg",
+  "engineContexts": [
+    "wolf"
+  ],
+  "formatVersion": 1,
+  "implementation": {
+    "id": "enginehost-wolf",
+    "name": "Enginehost WOLF RPG Editor runtime"
+  },
+  "origin": "https://github.com/droidtop/enginehost-wolf-plugin"
+}
