@@ -150,8 +150,33 @@ editor's).
 **Tile values.** From 100,000 on, an autotile: value / 100,000 is its autotile slot plus one,
 and value % 100,000 is four decimal digits, one per corner (top left, top right, bottom left,
 bottom right), choosing each quarter's shape. Below 100,000, a chip of the tileset's base
-sheet, 8 chips to a row. How the corner digits map to pieces of the autotile image is Unknown
-here (the renderer is not built).
+sheet, 8 chips to a row. How they are drawn is in "Drawing tiles" below.
+
+**Drawing tiles** (`wolf_tile_pieces`, `core/src/wolf_map.c`).
+- A **base chip sheet** is 8 chips wide and any number of chips tall, at the game's tile size
+  (16, 32, 40 or 48 pixels) [V, manual 06material.html]. Value v is the chip at column v % 8,
+  row v / 8.
+- An **autotile sheet** is 5 chips tall and one chip wide per animation frame [V, 06material].
+  Its rows, top to bottom, are the manual's five joins: toward the centre, vertical,
+  horizontal, outward, and surrounded on all sides.
+- **The editor stores each quarter's join in the map**, so a tile drawn from the map needs no
+  look at its neighbours. The four digits pick the row for the top-left, top-right, bottom-left
+  and bottom-right quarter, and each quarter copies the matching quarter of the chip in that
+  row. Evidence [D]: in the 244 maps of the survey games, 99.9% of the 1.4 million autotile
+  corner digits are 0 to 4, the five rows. 4 is the most common (surrounded, the inside of a
+  body of water). The few others come from maps the quick scan misread. Digit d taking row d is
+  [M]: the counts fit it, and a comparison run's screenshot settles it. A digit past 4 draws
+  nothing.
+- **Animation:** the column is the animation frame, stepping every 20 frames, or every N for a
+  sheet whose file name ends in `_FRAME=N` before the extension (3.50 on) [V, 06material].
+  When the step counter starts, and whether all autotiles share it, is **Unknown**.
+- Autotile slots seen in real maps run 1 to 16, with a few strays [D]; TileSetData.dat holds
+  15 sheets in 2.x and 31 in 3.x [R].
+- **Unknown:** how tiles changed at run time (240/241) get their joins. The editor's stored
+  digits cover only the map as saved. A changed autotile needs the joins worked out from its
+  neighbours, and the rule for that is not in the manual. Until a comparison run settles it,
+  the core will give a changed autotile "surrounded" (4) on every quarter [M] (240 and 241 are
+  not built yet).
 
 **One event:** `39 30 00 00`; s32 id; text name; s32 x; s32 y; u32 page count; four zero
 bytes; the pages, each starting with 0x79; then 0x70. The number of pages must equal the

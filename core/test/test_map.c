@@ -298,7 +298,38 @@ static void test_refusals(void) {
     free(b.p);
 }
 
+static void test_tile_pieces(void) {
+    wolf_tile_piece p[4];
+    /* base chips: eight to a row */
+    CHECK(wolf_tile_pieces(0, 32, 9, p) == 1 && p[0].sheet == -1 && p[0].sx == 0 && p[0].sy == 0 && p[0].w == 32);
+    CHECK(wolf_tile_pieces(13, 32, 0, p) == 1 && p[0].sx == 5 * 32 && p[0].sy == 1 * 32);
+    CHECK(wolf_tile_pieces(99999, 16, 0, p) == 1 && p[0].sx == 99999 % 8 * 16 && p[0].sy == 99999 / 8 * 16);
+    /* an autotile: slot 2 (value 300000), corners 4 0 3 1, animation column 2 */
+    CHECK(wolf_tile_pieces(304031, 32, 2, p) == 4);
+    for (int i = 0; i < 4; i++) CHECK(p[i].sheet == 2 && p[i].w == 16 && p[i].h == 16);
+    CHECK(p[0].sx == 64 && p[0].sy == 4 * 32 && p[0].dx == 0 && p[0].dy == 0);           /* top left, row 4 */
+    CHECK(p[1].sx == 64 + 16 && p[1].sy == 0 && p[1].dx == 16 && p[1].dy == 0);          /* top right, row 0 */
+    CHECK(p[2].sx == 64 && p[2].sy == 3 * 32 + 16 && p[2].dx == 0 && p[2].dy == 16);     /* bottom left, row 3 */
+    CHECK(p[3].sx == 64 + 16 && p[3].sy == 1 * 32 + 16 && p[3].dx == 16 && p[3].dy == 16); /* bottom right, row 1 */
+    CHECK(wolf_tile_pieces(100000, 48, 0, p) == 4 && p[0].sheet == 0 && p[3].sy == 24);
+    /* nothing to draw: negative, a digit past 4, more than four digits, no tile size */
+    CHECK(wolf_tile_pieces(-1, 32, 0, p) == 0);
+    CHECK(wolf_tile_pieces(100005, 32, 0, p) == 0);
+    CHECK(wolf_tile_pieces(150000, 32, 0, p) == 0);
+    CHECK(wolf_tile_pieces(5, 0, 0, p) == 0);
+    /* the animation step from the file name */
+    CHECK(wolf_autotile_step("Water1.png") == 20);
+    CHECK(wolf_autotile_step("Water1_FRAME=4.png") == 4);
+    CHECK(wolf_autotile_step("MapChip/Lava_FRAME=12.PNG") == 12);
+    CHECK(wolf_autotile_step("Water_FRAME=.png") == 20);
+    CHECK(wolf_autotile_step("Water_FRAME=0.png") == 20);
+    CHECK(wolf_autotile_step("Water_FRAME=4") == 4);
+    CHECK(wolf_autotile_step("x_FRAME=9999999.png") == 20);
+    CHECK(wolf_autotile_step("") == 20);
+}
+
 int main(void) {
+    test_tile_pieces();
     test_version(0x65, 0, 0, 0); /* 2.x, plain */
     test_version(0x66, 1, 0, 0); /* 3.x UTF-8, plain */
     test_version(0x66, 1, 0, 1); /* 3.x UTF-8 with no tiles */

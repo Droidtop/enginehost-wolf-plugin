@@ -81,7 +81,15 @@ help/06valueget.html [V]:
 | 1,100,000,000 + ... | changeable database (CDataBase), same layout [V] |
 | 1,300,000,000 + ... | system database (SysDataBase), same layout [V] |
 | 1,200,000,000s, 1,400,000,000 up | name no database [V, by omission]; read as 0, logged once |
-| 9,100,000s | characters: **not built yet**, read as 0, logged once |
+| 9,100,000 + 10·Y + X | map event Y's character value X [V]: see below; **not built yet** |
+| 9,180,000 + 10·Y + X | the hero (Y = 0) or party member Y, value X [V]; **not built yet** |
+| 9,190,000 + X | this event's character value X [V]; **not built yet** |
+
+Character values X [V, 06valueget]: 0 and 1 map X and Y in tiles; 2 and 3 X and Y in half
+tiles; 4 the event's height in pixels; 5 its shadow number (a party member's -1 takes the
+hero's); 6 its direction (1-9); 7 and 8 its pixel offsets X and Y; 9 its character image (a
+text). Writing a position makes the character walk there at its move speed [V]. Until
+characters are built these read as 0 and writes are ignored, logged once.
 
 Database call values read and write the field in place: a number field through the number
 calls, a text field through the string calls. A field of the other kind, or a type, data or field

@@ -101,6 +101,30 @@ void wolf_map_config(const wolf_map *m, wolf_config *cfg);
 int wolf_map_start_page(wolf_thread *t, const wolf_map *m, const wolf_config *cfg, uint32_t event_index,
                         uint32_t page_index);
 
+/* ---- Drawing a tile (formats.md, "Drawing tiles") ---------------------------------------- */
+
+#define WOLF_AUTOTILE_ROWS 5       /* an autotile sheet is five chips tall */
+#define WOLF_AUTOTILE_STEP 20      /* frames per animation step unless the file name says _FRAME=N */
+#define WOLF_BASE_COLUMNS 8        /* a base chip sheet is eight chips wide */
+
+/* One rectangle to copy from a sheet to the tile's place. sheet is -1 for the base chip sheet,
+ * or the autotile slot (0 for the tileset's first autotile sheet). dx, dy are offsets inside the
+ * tile. */
+typedef struct {
+    int32_t sheet;
+    uint32_t sx, sy, w, h;
+    uint32_t dx, dy;
+} wolf_tile_piece;
+
+/* The pieces that draw tile value v at a tile size of `tile` pixels: 1 for a base chip, 4 (one
+ * per quarter) for an autotile, 0 for a value that draws nothing (negative, or an autotile
+ * corner digit outside 0-4). column is the autotile's animation column, already reduced modulo
+ * the sheet's column count by the caller; it is ignored for base chips. */
+int wolf_tile_pieces(int32_t v, uint32_t tile, uint32_t column, wolf_tile_piece out[4]);
+/* The animation step, in frames, an autotile sheet's file name asks for: N from "_FRAME=N"
+ * just before the extension (3.50 on), else WOLF_AUTOTILE_STEP. */
+uint32_t wolf_autotile_step(const char *file_name);
+
 #ifdef __cplusplus
 }
 #endif

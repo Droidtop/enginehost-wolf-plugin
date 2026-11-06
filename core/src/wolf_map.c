@@ -248,3 +248,45 @@ int wolf_map_start_page(wolf_thread *t, const wolf_map *m, const wolf_config *cf
     wolf_thread_start(t, &e->pages[page_index].list, e->id, -1);
     return 0;
 }
+
+/* ---- Drawing a tile ---------------------------------------------------------------------- */
+
+int wolf_tile_pieces(int32_t v, uint32_t tile, uint32_t column, wolf_tile_piece out[4]) {
+    if (v < 0 || tile == 0 || tile > 4096u) return 0;
+    if (v < 100000) {
+        out[0].sheet = -1;
+        out[0].sx = (uint32_t)v % WOLF_BASE_COLUMNS * tile;
+        out[0].sy = (uint32_t)v / WOLF_BASE_COLUMNS * tile;
+        out[0].w = out[0].h = tile;
+        out[0].dx = out[0].dy = 0;
+        return 1;
+    }
+    uint32_t half = tile / 2, rest = (uint32_t)v % 100000u;
+    if (rest > 9999u) return 0; /* four digits only */
+    const uint32_t digit[4] = {rest / 1000u, rest / 100u % 10u, rest / 10u % 10u, rest % 10u};
+    for (int i = 0; i < 4; i++) {
+        if (digit[i] >= WOLF_AUTOTILE_ROWS) return 0;
+        uint32_t qx = (uint32_t)(i % 2) * half, qy = (uint32_t)(i / 2) * half;
+        out[i].sheet = v / 100000 - 1;
+        out[i].sx = column * tile + qx;
+        out[i].sy = digit[i] * tile + qy;
+        out[i].w = out[i].h = half;
+        out[i].dx = qx;
+        out[i].dy = qy;
+    }
+    return 4;
+}
+
+uint32_t wolf_autotile_step(const char *name) {
+    const char *dot = strrchr(name, '.');
+    size_t end = dot ? (size_t)(dot - name) : strlen(name);
+    const char *tag = "_FRAME=";
+    size_t tl = strlen(tag);
+    /* the digits run back from the extension to "_FRAME=" */
+    size_t i = end;
+    while (i > 0 && name[i - 1] >= '0' && name[i - 1] <= '9') i--;
+    if (i == end || end - i > 6 || i < tl || strncmp(name + i - tl, tag, tl) != 0) return WOLF_AUTOTILE_STEP;
+    uint32_t n = 0;
+    for (size_t k = i; k < end; k++) n = n * 10u + (uint32_t)(name[k] - '0');
+    return n ? n : WOLF_AUTOTILE_STEP;
+}
