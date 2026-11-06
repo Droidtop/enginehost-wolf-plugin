@@ -5,6 +5,7 @@ import dev.enginehost.api.EnginePlugin;
 import dev.enginehost.api.EnginePluginSession;
 import dev.enginehost.api.EngineProcess;
 import dev.enginehost.api.EngineStepDriven;
+import android.os.ParcelFileDescriptor;
 import java.io.IOException;
 
 /**
@@ -41,7 +42,15 @@ public final class WolfPlugin implements EnginePlugin, EngineStepDriven {
             throw new IOException("The Wolf core runs only in Enginehost's sandbox");
         }
         EngineHost host = session.host();
-        engine = nativeStart(session.gamePath());
+        // Sound goes into the host's audio ring (Enginehost plugin-native/enginehost_audio_ring);
+        // the native side maps it, so the descriptor can be closed straight after.
+        ParcelFileDescriptor ring = host.isolatedAudioBuffer();
+        try {
+            engine = nativeStart(session.gamePath(), ring == null ? -1 : ring.getFd(),
+                    host.isolatedAudioSampleRate());
+        } finally {
+            if (ring != null) ring.close();
+        }
         if (engine != 0) return;
         String reason = nativeError();
         try {
@@ -70,7 +79,7 @@ public final class WolfPlugin implements EnginePlugin, EngineStepDriven {
         engine = 0;
     }
 
-    static native long nativeStart(String gamePath);
+    static native long nativeStart(String gamePath, int audioRingFd, int audioSampleRate);
     static native String nativeError();
     static native int nativeWidth(long engine);
     static native int nativeHeight(long engine);

@@ -17,10 +17,12 @@ extern "C" {
 typedef struct wolf_frame wolf_frame;
 
 /* g and vm must outlive the frame loop; vm was made for g (common events and databases set).
- * NULL when out of memory. */
-wolf_frame *wolf_frame_start(const char *folder, wolf_open_game *g, wolf_vm *vm);
+ * audio_rate: the output sample rate, or 0 for no sound. NULL when out of memory. */
+wolf_frame *wolf_frame_start(const char *folder, wolf_open_game *g, wolf_vm *vm, uint32_t audio_rate);
 /* One frame into pixels (width * height, 0xFFRRGGBB), the game's screen size. */
 void wolf_frame_step(wolf_frame *f, uint32_t *pixels);
+/* The next frames of sound (interleaved stereo int16); silence without sound. */
+void wolf_frame_audio(wolf_frame *f, int16_t *out, uint32_t frames);
 void wolf_frame_stop(wolf_frame *f);
 
 #ifdef __cplusplus

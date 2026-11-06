@@ -9,4 +9,5 @@ No WOLF RPG Editor runtime code, no game data and no archive key is included.
 
 Images are decoded with stb_image by Sean Barrett (https://github.com/nothings/stb, commit
 d14d46f6b44456eb88beac58cba833a4135d4c89), used under its MIT licence; it is also offered as
-public domain. Its licence text ships as `LICENSE-stb.txt`.
+public domain. Its licence text ships as `LICENSE-stb.txt`. Ogg Vorbis sound is decoded with
+stb_vorbis from the same commit.

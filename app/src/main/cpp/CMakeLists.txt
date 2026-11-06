@@ -26,7 +26,8 @@ if(NOT EXISTS ${STB_DIR}/stb_image.h)
     message(FATAL_ERROR "No stb at ${STB_DIR}; run git submodule update --init.")
 endif()
 
-add_library(wolfrpg SHARED wolf_enginehost.c wolf_open.c wolf_files.c wolf_frame.c)
+add_library(wolfrpg SHARED wolf_enginehost.c wolf_open.c wolf_files.c wolf_frame.c wolf_decode.c
+            ${PLUGIN_NATIVE_DIR}/enginehost_audio_ring.c)
 target_include_directories(wolfrpg PRIVATE ${PLUGIN_NATIVE_DIR} ${STB_DIR})
 target_compile_options(wolfrpg PRIVATE -Wall -Wextra)
 target_link_libraries(wolfrpg PRIVATE wolfcore android log m)
