@@ -54,6 +54,7 @@ struct wolf_vm {
     int32_t ui_result;           /* the choice, -1 cancelled, -2 force-stopped */
 
     struct wolf_pictures *pics;  /* picture.c; NULL until the first 150 */
+    struct wolf_window *win;     /* msgwin.c; NULL unless the built-in window is used */
     wolf_audio audio;            /* sound.c */
     int has_audio;
 };
@@ -111,6 +112,7 @@ int wolf_h_stop_message(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);   /* 10
 int wolf_h_picture(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);        /* 150 */
 int wolf_h_sound(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);          /* 140 */
 void wolf_pictures_free(wolf_vm *vm);
+void wolf_window_free(wolf_vm *vm);
 
 /* After a construct's opener c (flow.c): on to just past the nth (0-based) marker with this code
  * at c's indent, or past the branch end when there is none. 1 when the marker was found. */
@@ -123,6 +125,13 @@ typedef void (*wolf_text_fn)(void *ctx, const wolf_glyph *g, double x, double y,
 #define WOLF_TEXT_SPACING 4   /* pixels between lines before any \space[] [M] */
 void wolf_text_layout(wolf_vm *vm, const wolf_render_source *src, const char *text, uint32_t size,
                       wolf_text_fn fn, void *ctx, double *width, double *height);
+
+/* The quads of one picture (render.c), lowest level of wolf_picture_quads; text pictures draw at
+ * most glyph_limit glyphs. Returns how many glyphs a text picture laid out. */
+uint32_t wolf_one_picture_quads(const wolf_vm *vm, const wolf_render_source *src, const wolf_picture *p,
+                                uint32_t glyph_limit, wolf_quad_fn fn, void *ctx);
+/* The base font size: system variable 8, or WOLF_TEXT_SIZE when the game leaves it at 0. */
+uint32_t wolf_text_size(const wolf_vm *vm);
 
 /* Text (text.c). The longest text the core builds; longer results are cut there, logged once. */
 #define WOLF_TEXT_MAX (4u << 20)

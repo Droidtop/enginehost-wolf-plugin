@@ -89,24 +89,80 @@ typedef struct {
     const placement *pl;
     wolf_quad_fn fn;
     void *ctx;
+    uint32_t limit, laid; /* glyphs drawn at most (a message typing out), and laid out so far */
 } text_out;
 
 static void glyph_quad(void *ctx, const wolf_glyph *g, double x, double y, uint32_t rgb) {
-    const text_out *t = ctx;
+    text_out *t = ctx;
+    if (t->laid++ >= t->limit) return;
     const double l[4] = {x, y, x + g->image->width, y + g->image->height};
     const double u[4] = {0, 0, g->image->width, g->image->height};
     emit_as(t->p, g->key, g->image, rgb, t->pl, l, u, t->fn, t->ctx);
 }
 
-static void text_quads(const wolf_vm *vm, const wolf_render_source *src, const wolf_picture *p, wolf_quad_fn fn,
-                       void *ctx) {
+uint32_t wolf_text_size(const wolf_vm *vm) {
+    /* system variable 8, the base font size for messages and string pictures (manual,
+     * 06systemvalue.html); 18 when the game leaves it at 0 [M] */
+    int32_t v = wolf_get((wolf_vm *)vm, NULL, 9000008);
+    return v > 0 ? (uint32_t)v : WOLF_TEXT_SIZE;
+}
+
+static uint32_t text_quads(const wolf_vm *vm, const wolf_render_source *src, const wolf_picture *p, uint32_t limit,
+                           wolf_quad_fn fn, void *ctx) {
     double w = 0, h = 0;
     wolf_vm *mvm = (wolf_vm *)vm; /* layout logs once and reads the colour table; nothing else */
-    wolf_text_layout(mvm, src, p->content, WOLF_TEXT_SIZE, NULL, NULL, &w, &h);
+    uint32_t size = wolf_text_size(vm);
+    wolf_text_layout(mvm, src, p->content, size, NULL, NULL, &w, &h);
     placement pl;
     set_placement(&pl, p, w, h);
-    text_out t = {p, &pl, fn, ctx};
-    wolf_text_layout(mvm, src, p->content, WOLF_TEXT_SIZE, glyph_quad, &t, NULL, NULL);
+    text_out t = {p, &pl, fn, ctx, limit, 0};
+    wolf_text_layout(mvm, src, p->content, size, glyph_quad, &t, NULL, NULL);
+    return t.laid;
+}
+
+uint32_t wolf_one_picture_quads(const wolf_vm *vm, const wolf_render_source *src, const wolf_picture *p,
+                                uint32_t glyph_limit, wolf_quad_fn fn, void *ctx) {
+    if (p->zoom_x == 0 || p->zoom_y == 0 || !p->content) return 0;
+    if (p->kind == WOLF_PIC_TEXT) return src->glyph ? text_quads(vm, src, p, glyph_limit, fn, ctx) : 0;
+    if (p->content[0] == '<') return 0; /* the special names: not yet */
+    const wolf_image *im = src->image(src->ctx, p->content);
+    if (!im || !im->argb || !im->width || !im->height) return 0;
+    double sw, sh, ox = 0, oy = 0;
+    int window = p->kind == WOLF_PIC_WINDOW;
+    if (window) {
+        if (p->div_x <= 0 || p->div_y <= 0 || p->div_x > 16384 || p->div_y > 16384) return 0;
+        sw = p->div_x;
+        sh = p->div_y;
+    } else {
+        uint32_t dx = p->div_x > 0 ? (uint32_t)p->div_x : 1, dy = p->div_y > 0 ? (uint32_t)p->div_y : 1;
+        if (dx > im->width) dx = im->width;
+        if (dy > im->height) dy = im->height;
+        sw = (double)(im->width / dx);
+        sh = (double)(im->height / dy);
+        uint32_t piece = p->pattern > 0 ? (uint32_t)p->pattern - 1 : 0;
+        if (piece >= dx * dy) piece = 0; /* a piece the split does not have: the first [M] */
+        ox = (double)(piece % dx) * sw;
+        oy = (double)(piece / dx) * sh;
+    }
+    placement pl;
+    set_placement(&pl, p, sw, sh);
+    if (!window) {
+        const double l[4] = {0, 0, sw, sh}, u[4] = {ox, oy, ox + sw, oy + sh};
+        emit(p, im, &pl, l, u, fn, ctx);
+        return 0;
+    }
+    /* a window: the image cut 3x3; corners keep their size, the rest stretch [M]. A window
+     * smaller than its corners shrinks them to fit [M]. */
+    double icw = (double)(im->width / 3), ich = (double)(im->height / 3);
+    double cw = icw * 2 > sw ? sw / 2 : icw, ch = ich * 2 > sh ? sh / 2 : ich;
+    const double lx[4] = {0, cw, sw - cw, sw}, ly[4] = {0, ch, sh - ch, sh};
+    const double ux[4] = {0, icw, im->width - icw, im->width}, uy[4] = {0, ich, im->height - ich, im->height};
+    for (int r = 0; r < 3; r++)
+        for (int k = 0; k < 3; k++) {
+            const double l[4] = {lx[k], ly[r], lx[k + 1], ly[r + 1]}, u[4] = {ux[k], uy[r], ux[k + 1], uy[r + 1]};
+            emit(p, im, &pl, l, u, fn, ctx);
+        }
+    return 0;
 }
 
 void wolf_picture_quads(const wolf_vm *vm, const wolf_render_source *src, int32_t from, int32_t to, wolf_quad_fn fn,
@@ -115,49 +171,7 @@ void wolf_picture_quads(const wolf_vm *vm, const wolf_render_source *src, int32_
     for (uint32_t i = 0; i < wolf_vm_picture_count(vm); i++) {
         const wolf_picture *p = wolf_vm_picture_at(vm, i);
         if (p->number < from || p->number > to) continue;
-        if (p->zoom_x == 0 || p->zoom_y == 0 || !p->content) continue;
-        if (p->kind == WOLF_PIC_TEXT) {
-            if (src->glyph) text_quads(vm, src, p, fn, ctx);
-            continue;
-        }
-        if (p->content[0] == '<') continue; /* the special names: not yet */
-        const wolf_image *im = src->image(src->ctx, p->content);
-        if (!im || !im->argb || !im->width || !im->height) continue;
-        double sw, sh, ox = 0, oy = 0;
-        int window = p->kind == WOLF_PIC_WINDOW;
-        if (window) {
-            if (p->div_x <= 0 || p->div_y <= 0 || p->div_x > 16384 || p->div_y > 16384) continue;
-            sw = p->div_x;
-            sh = p->div_y;
-        } else {
-            uint32_t dx = p->div_x > 0 ? (uint32_t)p->div_x : 1, dy = p->div_y > 0 ? (uint32_t)p->div_y : 1;
-            if (dx > im->width) dx = im->width;
-            if (dy > im->height) dy = im->height;
-            sw = (double)(im->width / dx);
-            sh = (double)(im->height / dy);
-            uint32_t piece = p->pattern > 0 ? (uint32_t)p->pattern - 1 : 0;
-            if (piece >= dx * dy) piece = 0; /* a piece the split does not have: the first [M] */
-            ox = (double)(piece % dx) * sw;
-            oy = (double)(piece / dx) * sh;
-        }
-        placement pl;
-        set_placement(&pl, p, sw, sh);
-        if (!window) {
-            const double l[4] = {0, 0, sw, sh}, u[4] = {ox, oy, ox + sw, oy + sh};
-            emit(p, im, &pl, l, u, fn, ctx);
-            continue;
-        }
-        /* a window: the image cut 3x3; corners keep their size, the rest stretch [M]. A window
-         * smaller than its corners shrinks them to fit [M]. */
-        double icw = (double)(im->width / 3), ich = (double)(im->height / 3);
-        double cw = icw * 2 > sw ? sw / 2 : icw, ch = ich * 2 > sh ? sh / 2 : ich;
-        const double lx[4] = {0, cw, sw - cw, sw}, ly[4] = {0, ch, sh - ch, sh};
-        const double ux[4] = {0, icw, im->width - icw, im->width}, uy[4] = {0, ich, im->height - ich, im->height};
-        for (int r = 0; r < 3; r++)
-            for (int k = 0; k < 3; k++) {
-                const double l[4] = {lx[k], ly[r], lx[k + 1], ly[r + 1]}, u[4] = {ux[k], uy[r], ux[k + 1], uy[r + 1]};
-                emit(p, im, &pl, l, u, fn, ctx);
-            }
+        wolf_one_picture_quads(vm, src, p, UINT32_MAX, fn, ctx);
     }
 }
 

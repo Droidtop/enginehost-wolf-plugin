@@ -143,6 +143,7 @@ void wolf_vm_destroy(wolf_vm *vm) {
     free(vm->cself);
     free_strings(vm->cself_str, (size_t)vm->ncommon * 5u);
     wolf_pictures_free(vm);
+    wolf_window_free(vm);
     free(vm);
 }
 

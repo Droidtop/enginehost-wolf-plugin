@@ -253,6 +253,25 @@ typedef struct {
 /* NULL: sound requests are logged only. Copied. */
 void wolf_vm_set_audio(wolf_vm *vm, const wolf_audio *audio);
 
+/*
+ * The built-in message window and choice list (msgwin.c): the core answers 101 and 102 itself,
+ * from the player's keys, and draws the text, the pause cursor and the choice window as quads.
+ * The window's background is the game's own (its common events draw it with pictures).
+ * docs/behaviour/drawing.md, "The message window".
+ */
+enum {
+    WOLF_KEY_CONFIRM = 0x01, WOLF_KEY_CANCEL = 0x02, WOLF_KEY_SUB = 0x04,
+    WOLF_KEY_UP = 0x08, WOLF_KEY_DOWN = 0x10, WOLF_KEY_LEFT = 0x20, WOLF_KEY_RIGHT = 0x40,
+};
+/* Use the built-in window (instead of a plugin UI or headless). */
+int wolf_vm_use_window(wolf_vm *vm);
+/* The keys held this frame (WOLF_KEY_*). Call once a frame, before the frame's events run. */
+void wolf_vm_input(wolf_vm *vm, uint32_t keys);
+/* The window's quads for a screen of width x height, drawn between pictures 0-99999 and 100000 up
+ * (manual 04ev_picture.html). */
+void wolf_window_quads(const wolf_vm *vm, const wolf_render_source *src, uint32_t width, uint32_t height,
+                       wolf_quad_fn fn, void *ctx);
+
 /* The flags 104 (force-stop choices) and 105 (force-stop message) set. */
 int wolf_vm_flag_stop_choices(const wolf_vm *vm);
 int wolf_vm_flag_stop_message(const wolf_vm *vm);
