@@ -54,7 +54,7 @@ static int refuse(opener *o, const char *fmt, ...) {
  * The entry of dir named name in any letter case (the games come from Windows, whose names are
  * not case-sensitive), as a full path in out. 0 when found; kind is S_IFDIR or S_IFREG.
  */
-static int find_ci(const char *dir, const char *name, mode_t kind, char *out, size_t out_size) {
+int wolf_find_ci(const char *dir, const char *name, unsigned kind, char *out, size_t out_size) {
     DIR *d = opendir(dir);
     if (!d) return -1;
     int found = -1;
@@ -70,7 +70,7 @@ static int find_ci(const char *dir, const char *name, mode_t kind, char *out, si
 }
 
 /* A whole file into a new buffer. 0, or an errno. */
-static int slurp(const char *path, uint8_t **data, size_t *len) {
+int wolf_slurp(const char *path, uint8_t **data, size_t *len) {
     *data = NULL;
     *len = 0;
     int fd = open(path, O_RDONLY | O_CLOEXEC);
@@ -118,8 +118,8 @@ static int archive_read(void *ctx, uint64_t offset, void *buf, size_t len) {
 static int fetch(opener *o, const char *name, uint8_t **data, size_t *len) {
     if (!o->archive) {
         char path[4096];
-        if (find_ci(o->dir, name, S_IFREG, path, sizeof path) != 0) return 1;
-        int err = slurp(path, data, len);
+        if (wolf_find_ci(o->dir, name, S_IFREG, path, sizeof path) != 0) return 1;
+        int err = wolf_slurp(path, data, len);
         if (err) return refuse(o, "%s could not be read (%s).", name, strerror(err));
         return 0;
     }
@@ -174,21 +174,21 @@ static int open_archive(opener *o, const char *path, const char *label) {
 /* Finds where the project data is: unpacked first, as the runtime prefers loose files. */
 static int locate(opener *o, wolf_open_game *g) {
     char path[4096], data[4096];
-    if (find_ci(o->folder, "GamePro.exe", S_IFREG, path, sizeof path) == 0)
+    if (wolf_find_ci(o->folder, "GamePro.exe", S_IFREG, path, sizeof path) == 0)
         return refuse(o, "This is a WOLF RPG Editor Pro game, which uses Wolf's protection. Enginehost "
                          "does not run it.");
-    int has_data = find_ci(o->folder, "Data", S_IFDIR, data, sizeof data) == 0;
-    if (has_data && find_ci(data, "BasicData", S_IFDIR, o->dir, sizeof o->dir) == 0) {
+    int has_data = wolf_find_ci(o->folder, "Data", S_IFDIR, data, sizeof data) == 0;
+    if (has_data && wolf_find_ci(data, "BasicData", S_IFDIR, o->dir, sizeof o->dir) == 0) {
         snprintf(g->source, sizeof g->source, "Data/BasicData");
         say(o, "project data: Data/BasicData (unpacked)");
         return 0;
     }
-    if (find_ci(o->folder, "Data.wolf", S_IFREG, path, sizeof path) == 0) {
+    if (wolf_find_ci(o->folder, "Data.wolf", S_IFREG, path, sizeof path) == 0) {
         snprintf(g->source, sizeof g->source, "Data.wolf");
         o->prefix = "BasicData/";
         return open_archive(o, path, "Data.wolf");
     }
-    if (has_data && find_ci(data, "BasicData.wolf", S_IFREG, path, sizeof path) == 0) {
+    if (has_data && wolf_find_ci(data, "BasicData.wolf", S_IFREG, path, sizeof path) == 0) {
         snprintf(g->source, sizeof g->source, "Data/BasicData.wolf");
         o->prefix = "";
         return open_archive(o, path, "Data/BasicData.wolf");

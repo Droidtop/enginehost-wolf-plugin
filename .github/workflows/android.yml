@@ -50,6 +50,9 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+          # The vendored libraries under app/src/main/cpp/vendor are submodules, pinned by their
+          # gitlinks (Droidtop/tracker#921).
+          submodules: true
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
@@ -100,6 +103,7 @@ jobs:
           cp enginehost/bundle-metadata.json build/unsigned/bundle-metadata.json
           cp enginehost/LICENSES.md build/unsigned/payload/LICENSES.md
           cp LICENSE build/unsigned/payload/LICENSE-GPL-3.0.txt
+          cp app/src/main/cpp/vendor/stb/LICENSE build/unsigned/payload/LICENSE-stb.txt
           # A tar keeps the file modes the manifest signs; an artifact would not.
           tar -cf build/unsigned.tar -C build/unsigned payload bundle-metadata.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

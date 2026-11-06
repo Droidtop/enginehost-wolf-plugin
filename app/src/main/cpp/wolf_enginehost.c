@@ -14,6 +14,7 @@
 #include <string.h>
 
 #include "vm.h"
+#include "wolf_frame.h"
 #include "wolf_open.h"
 
 #define TAG "wolf"
@@ -23,7 +24,8 @@
 typedef struct {
     wolf_open_game game;
     wolf_vm *vm; /* holds pointers into game: freed first */
-    int drawn;
+    wolf_frame *frame; /* runs the game; holds pointers into vm and game: freed before both */
+    uint32_t *pixels;
 } engine;
 
 static char gError[512];
@@ -76,14 +78,17 @@ static jlong JNICALL NativeStart(JNIEnv *env, jclass cls, jstring gamePath)
         wolf_open_free(&e->game);
         free(e);
         e = NULL;
-    } else if (!(e->vm = StartVm(e))) {
+    } else if (!(e->vm = StartVm(e)) || !(e->frame = wolf_frame_start(folder, &e->game, e->vm)) ||
+               !(e->pixels = malloc((size_t)e->game.width * e->game.height * sizeof *e->pixels))) {
         snprintf(gError, sizeof gError, "Out of memory starting the Wolf core.");
+        wolf_frame_stop(e->frame);
+        wolf_vm_destroy(e->vm);
         wolf_open_free(&e->game);
         free(e);
         e = NULL;
     } else {
-        __android_log_print(ANDROID_LOG_INFO, TAG, "loaded from %s; interpreter ready with %u common events and "
-                            "the databases; nothing runs yet, so the screen stays black", e->game.source,
+        __android_log_print(ANDROID_LOG_INFO, TAG, "loaded from %s; running %u common events, pictures drawn in "
+                            "software; messages and choices are headless (logged) for now", e->game.source,
                             e->game.commons.count);
     }
     (*env)->ReleaseStringUTFChars(env, gamePath, folder);
@@ -108,19 +113,15 @@ static jint JNICALL NativeHeight(JNIEnv *env, jclass cls, jlong handle)
     return (jint)((engine *)(intptr_t)handle)->game.height;
 }
 
-/* The whole frame once, black; after that nothing changes (0). */
+/* One frame: the game runs a step and the whole screen is drawn again. */
 static jint JNICALL NativeStep(JNIEnv *env, jclass cls, jlong handle, jintArray pixels)
 {
     (void)cls;
     engine *e = (engine *)(intptr_t)handle;
-    if (e->drawn) return 0;
     jsize want = (jsize)(e->game.width * e->game.height);
     if ((*env)->GetArrayLength(env, pixels) < want) return -1;
-    jint *p = (*env)->GetPrimitiveArrayCritical(env, pixels, NULL);
-    if (!p) return -1;
-    for (jsize i = 0; i < want; i++) p[i] = (jint)0xFF000000u;
-    (*env)->ReleasePrimitiveArrayCritical(env, pixels, p, 0);
-    e->drawn = 1;
+    wolf_frame_step(e->frame, e->pixels); /* drawn outside the critical section */
+    (*env)->SetIntArrayRegion(env, pixels, 0, want, (const jint *)e->pixels);
     return (jint)e->game.height; /* rows 0 .. height-1 changed */
 }
 
@@ -128,6 +129,8 @@ static void JNICALL NativeStop(JNIEnv *env, jclass cls, jlong handle)
 {
     (void)env; (void)cls;
     engine *e = (engine *)(intptr_t)handle;
+    wolf_frame_stop(e->frame);
+    free(e->pixels);
     wolf_vm_destroy(e->vm);
     wolf_open_free(&e->game);
     free(e);

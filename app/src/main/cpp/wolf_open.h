@@ -41,6 +41,12 @@ int wolf_open(const char *folder, wolf_open_game *g, char *why, size_t why_size,
               void *log_ctx);
 void wolf_open_free(wolf_open_game *g);
 
+/* Shared with wolf_files.c. The child of dir called name in any case, of kind S_IFREG or
+ * S_IFDIR, written to out: 0, or -1 when there is none. */
+int wolf_find_ci(const char *dir, const char *name, unsigned kind, char *out, size_t out_size);
+/* A whole file into a new buffer (capped at WOLF_READ_UNPACKED_MAX): 0, or an errno. */
+int wolf_slurp(const char *path, uint8_t **data, size_t *len);
+
 #ifdef __cplusplus
 }
 #endif
