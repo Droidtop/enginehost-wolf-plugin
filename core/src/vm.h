@@ -271,6 +271,9 @@ void wolf_vm_input(wolf_vm *vm, uint32_t keys);
  * (manual 04ev_picture.html). */
 void wolf_window_quads(const wolf_vm *vm, const wolf_render_source *src, uint32_t width, uint32_t height,
                        wolf_quad_fn fn, void *ctx);
+/* The same, drawn in software onto frame (the fallback renderer, as wolf_render_pictures). */
+void wolf_render_window(const wolf_vm *vm, const wolf_render_source *src, uint32_t *frame, uint32_t width,
+                        uint32_t height);
 
 /* The flags 104 (force-stop choices) and 105 (force-stop message) set. */
 int wolf_vm_flag_stop_choices(const wolf_vm *vm);

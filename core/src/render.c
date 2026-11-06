@@ -243,3 +243,10 @@ void wolf_render_pictures(const wolf_vm *vm, const wolf_render_source *src, uint
     canvas cv = {frame, width, height};
     wolf_picture_quads(vm, src, from, to, draw_quad, &cv);
 }
+
+void wolf_render_window(const wolf_vm *vm, const wolf_render_source *src, uint32_t *frame, uint32_t width,
+                        uint32_t height) {
+    if (!frame) return;
+    canvas cv = {frame, width, height};
+    wolf_window_quads(vm, src, width, height, draw_quad, &cv);
+}

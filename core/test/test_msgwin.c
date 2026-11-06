@@ -97,6 +97,11 @@ static void test_message(void) {
     CHECK(quads(vm) == 0); /* nothing typed yet */
     wolf_vm_input(vm, 0);
     CHECK(quads(vm) == 2 && first_x == 30 && first_y == 40);
+    /* the software renderer draws the same: two white 4x8 blocks from 30,40 */
+    static uint32_t frame[640 * 480];
+    wolf_render_window(vm, &SRC, frame, 640, 480);
+    CHECK(frame[40 * 640 + 30] == 0xFFFFFFFFu && frame[47 * 640 + 33] == 0xFFFFFFFFu);
+    CHECK(frame[40 * 640 + 35] == 0xFFFFFFFFu && frame[40 * 640 + 39] == 0u);
     wolf_vm_input(vm, 0);
     CHECK(quads(vm) == 4);
     /* confirm while typing shows the rest, and does not close */
