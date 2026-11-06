@@ -68,8 +68,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
         with:
           gradle-version: "8.13"
-      # The plugin API this core compiles against: Enginehost's own, at the commit pinned here.
-      - uses: Droidtop/enginehost/.github/actions/plugin-api@527142623b8099782637b46c09e77e86988cfea9
+      # The plugin API this core compiles against, and plugin-native (the file layer and the audio
+      # ring) it builds into its library: Enginehost's own, at the commit pinned here, into
+      # build/enginehost. No copies are committed here (Droidtop/tracker#921 item 17).
+      - uses: Droidtop/enginehost/.github/actions/plugin-api@c9c543afe7fa7c4e5250d79c250c63a3a7ad31bc
       - name: Build the wrapper library
         run: gradle :app:assembleRelease --no-daemon --stacktrace
       - name: Pack the bundle inputs

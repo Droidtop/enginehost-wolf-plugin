@@ -15,7 +15,11 @@ if(NOT EXISTS ${ENGINE_DIR}/CMakeLists.txt)
 endif()
 add_subdirectory(${ENGINE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/core)
 
-set(PLUGIN_NATIVE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../../plugin-native)
+# Enginehost's plugin-native, checked out by the plugin-api action at its pinned commit.
+set(PLUGIN_NATIVE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../../build/enginehost/plugin-native)
+if(NOT EXISTS ${PLUGIN_NATIVE_DIR}/enginehost_vfs.cmake)
+    message(FATAL_ERROR "No plugin-native at ${PLUGIN_NATIVE_DIR}; the workflow's plugin-api action puts it there.")
+endif()
 
 set(STB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendor/stb)
 if(NOT EXISTS ${STB_DIR}/stb_image.h)

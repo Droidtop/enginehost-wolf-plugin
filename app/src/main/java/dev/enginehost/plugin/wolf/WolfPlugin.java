@@ -13,7 +13,7 @@ import java.io.IOException;
  *
  * <p>Step-driven in the isolated process: the host calls {@link #step} once a frame and draws
  * the pixels it fills in. The game folder is read through Enginehost's file layer
- * (plugin-native/), so the core opens exactly what the host hands it and nothing else.
+ * (Enginehost's plugin-native/), so the core opens exactly what the host hands it and nothing else.
  *
  * <p>First milestone: {@link #onCreate} loads the game's project data (Game.dat,
  * CommonEvent.dat, the three databases, unpacked or from Data.wolf) and logs it under the tag

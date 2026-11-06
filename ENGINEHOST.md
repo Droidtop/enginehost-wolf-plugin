@@ -14,9 +14,10 @@ that builds a bundle.
 - `app/src/main/cpp/`: `wolf_open.c` finds and loads a game's project data with the core's
   loaders; `wolf_enginehost.c` is the JNI side, bound by `enginehost_register_natives`. One
   library, `libwolfrpg.so`, for arm64-v8a and x86_64, with the core linked in statically.
-- `plugin-native/`: Enginehost's file layer, copied verbatim from Enginehost. Every libc file call
-  in the library goes through the host's broker, so the core reads only the game folder it is
-  handed. The bundle does not write the game folder yet (`writesGameFolder: false`).
+- Enginehost's `plugin-native/` (the file layer and the audio ring) is not kept here: the
+  workflow's plugin-api action checks it out into `build/enginehost/` at the pinned Enginehost
+  commit (Droidtop/tracker#921 item 17). Every libc file call in the library goes through the
+  host's broker, so the core reads only the game folder it is handed. The bundle does not write the game folder yet (`writesGameFolder: false`).
 
 ## What it does now (first milestone, Droidtop/tracker#858)
 
