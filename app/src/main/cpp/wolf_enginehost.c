@@ -171,13 +171,13 @@ static jint JNICALL NativeHeight(JNIEnv *env, jclass cls, jlong handle)
 }
 
 /* One frame: the game runs a step and the whole screen is drawn again. */
-static jint JNICALL NativeStep(JNIEnv *env, jclass cls, jlong handle, jintArray pixels)
+static jint JNICALL NativeStep(JNIEnv *env, jclass cls, jlong handle, jintArray pixels, jint keys)
 {
     (void)cls;
     engine *e = (engine *)(intptr_t)handle;
     jsize want = (jsize)(e->game.width * e->game.height);
     if ((*env)->GetArrayLength(env, pixels) < want) return -1;
-    wolf_frame_step(e->frame, e->pixels); /* drawn outside the critical section */
+    wolf_frame_step(e->frame, (uint32_t)keys, e->pixels); /* drawn outside the critical section */
     (*env)->SetIntArrayRegion(env, pixels, 0, want, (const jint *)e->pixels);
     if (e->mix) { /* keep the ring AUDIO_AHEAD_MS ahead */
         uint32_t ahead = e->rate * AUDIO_AHEAD_MS / 1000u;
@@ -212,7 +212,7 @@ static void JNICALL NativeGlSize(JNIEnv *env, jclass cls, jlong handle, jint wid
 
 /* One drawn frame: the game runs the 60 fps frames that are due by now (at most a few after a
  * stall), then the pictures are drawn. The display's own rate may be 60, 90 or 120 Hz. */
-static void JNICALL NativeGlDraw(JNIEnv *env, jclass cls, jlong handle, jlong nowNs)
+static void JNICALL NativeGlDraw(JNIEnv *env, jclass cls, jlong handle, jlong nowNs, jint keys)
 {
     (void)env; (void)cls;
     engine *e = (engine *)(intptr_t)handle;
@@ -225,7 +225,7 @@ static void JNICALL NativeGlDraw(JNIEnv *env, jclass cls, jlong handle, jlong no
     }
     int steps = 0;
     while (e->due_ns >= GAME_FRAME_NS && steps < STEPS_PER_DRAW_MAX) {
-        wolf_frame_run(e->frame);
+        wolf_frame_run(e->frame, (uint32_t)keys);
         e->due_ns -= GAME_FRAME_NS;
         steps++;
     }
@@ -259,11 +259,11 @@ void enginehost_register_natives(JNIEnv *env, jclass cls)
         { "nativeError", "()Ljava/lang/String;", (void *)NativeError },
         { "nativeWidth", "(J)I", (void *)NativeWidth },
         { "nativeHeight", "(J)I", (void *)NativeHeight },
-        { "nativeStep", "(J[I)I", (void *)NativeStep },
+        { "nativeStep", "(J[II)I", (void *)NativeStep },
         { "nativeStop", "(J)V", (void *)NativeStop },
         { "nativeGlCreated", "(J)V", (void *)NativeGlCreated },
         { "nativeGlSize", "(JII)V", (void *)NativeGlSize },
-        { "nativeGlDraw", "(JJ)V", (void *)NativeGlDraw },
+        { "nativeGlDraw", "(JJI)V", (void *)NativeGlDraw },
         { "nativePause", "(JZ)V", (void *)NativePause },
     };
     (*env)->RegisterNatives(env, cls, methods, (jint)(sizeof methods / sizeof methods[0]));

@@ -213,6 +213,10 @@ wolf_frame *wolf_frame_start(const char *folder, wolf_open_game *g, wolf_vm *vm,
     pthread_mutex_init(&f->audio_lock, NULL);
     f->files = wolf_files_open(folder);
     f->fonts = wolf_fonts_open(folder, &g->game, vm);
+    if (wolf_vm_use_window(vm) != 0) { /* the core's own message window answers 101 and 102 */
+        wolf_frame_stop(f);
+        return NULL;
+    }
     if (!f->files || wolf_commonrun_init(&f->run, vm, &g->commons) != WOLF_COMMONRUN_OK) {
         wolf_frame_stop(f);
         return NULL;
@@ -229,26 +233,33 @@ wolf_frame *wolf_frame_start(const char *folder, wolf_open_game *g, wolf_vm *vm,
     return f;
 }
 
-void wolf_frame_run(wolf_frame *f) {
+#define BAND_LOW_END 99999 /* pictures up to here sit under the message window (manual) */
+
+void wolf_frame_run(wolf_frame *f, uint32_t keys) {
     wolf_fonts_frame(f->fonts); /* between frames: no glyph is in use */
+    wolf_vm_input(f->vm, keys);  /* the window answers before the frame's events run */
     wolf_commonrun_step(&f->run);
     wolf_vm_pictures_tick(f->vm);
 }
 
 void wolf_frame_quads(wolf_frame *f, wolf_quad_fn fn, void *ctx) {
     wolf_render_source src = {f, image, glyph};
-    wolf_picture_quads(f->vm, &src, INT32_MIN, INT32_MAX, fn, ctx);
+    wolf_picture_quads(f->vm, &src, INT32_MIN, BAND_LOW_END, fn, ctx);
+    wolf_window_quads(f->vm, &src, f->g->width, f->g->height, fn, ctx);
+    wolf_picture_quads(f->vm, &src, BAND_LOW_END + 1, INT32_MAX, fn, ctx);
 }
 
 void wolf_frame_draw(wolf_frame *f, uint32_t *pixels) {
     uint32_t w = f->g->width, h = f->g->height;
     for (size_t i = 0; i < (size_t)w * h; i++) pixels[i] = 0xFF000000u;
     wolf_render_source src = {f, image, glyph};
-    wolf_render_pictures(f->vm, &src, pixels, w, h, INT32_MIN, INT32_MAX);
+    wolf_render_pictures(f->vm, &src, pixels, w, h, INT32_MIN, BAND_LOW_END);
+    wolf_render_window(f->vm, &src, pixels, w, h);
+    wolf_render_pictures(f->vm, &src, pixels, w, h, BAND_LOW_END + 1, INT32_MAX);
 }
 
-void wolf_frame_step(wolf_frame *f, uint32_t *pixels) {
-    wolf_frame_run(f);
+void wolf_frame_step(wolf_frame *f, uint32_t keys, uint32_t *pixels) {
+    wolf_frame_run(f, keys);
     wolf_frame_draw(f, pixels);
 }
 

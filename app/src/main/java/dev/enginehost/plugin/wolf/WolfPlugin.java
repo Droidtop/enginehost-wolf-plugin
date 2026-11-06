@@ -1,9 +1,12 @@
 package dev.enginehost.plugin.wolf;
 
+import android.annotation.SuppressLint;
 import android.opengl.GLSurfaceView;
+import android.view.MotionEvent;
 import android.os.ParcelFileDescriptor;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import dev.enginehost.api.EngineControllerEvent;
 import dev.enginehost.api.EngineHost;
 import dev.enginehost.api.EnginePlugin;
 import dev.enginehost.api.EnginePluginSession;
@@ -46,6 +49,29 @@ public final class WolfPlugin implements EnginePlugin, EngineStepDriven {
     private long engine;
     private GLSurfaceView view;
 
+    // The keys held, as the core's WOLF_KEY_* bits (vm.h), from Enginehost's controller actions.
+    // A tap on the screen is one confirm press, held for one game frame.
+    private static final int KEY_CONFIRM = 0x01, KEY_CANCEL = 0x02, KEY_SUB = 0x04,
+            KEY_UP = 0x08, KEY_DOWN = 0x10, KEY_LEFT = 0x20, KEY_RIGHT = 0x40;
+    private volatile int keys;
+    private volatile boolean tapped;
+
+    /** The keys for the next game frame: what is held, plus a pending tap (taken once). */
+    private int takeKeys() {
+        int k = keys;
+        if (tapped) {
+            tapped = false;
+            k |= KEY_CONFIRM;
+        }
+        return k;
+    }
+
+    private void setKey(int bit, boolean down) {
+        synchronized (this) {
+            keys = down ? keys | bit : keys & ~bit;
+        }
+    }
+
     @Override
     public void onCreate(EnginePluginSession session) throws Exception {
         EngineHost host = session.host();
@@ -65,9 +91,18 @@ public final class WolfPlugin implements EnginePlugin, EngineStepDriven {
                 @Override public void onSurfaceChanged(GL10 unused, int width, int height) {
                     nativeGlSize(running, width, height);
                 }
-                @Override public void onDrawFrame(GL10 unused) { nativeGlDraw(running, System.nanoTime()); }
+                @Override public void onDrawFrame(GL10 unused) {
+                    nativeGlDraw(running, System.nanoTime(), takeKeys());
+                }
             });
             view.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
+            view.setOnTouchListener(new android.view.View.OnTouchListener() {
+                @SuppressLint("ClickableViewAccessibility")
+                @Override public boolean onTouch(android.view.View v, MotionEvent event) {
+                    if (event.getActionMasked() == MotionEvent.ACTION_UP) tapped = true;
+                    return true;
+                }
+            });
             display.addView(view, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             return;
@@ -99,12 +134,37 @@ public final class WolfPlugin implements EnginePlugin, EngineStepDriven {
 
     @Override
     public int step(int[] pixels) {
-        return engine == 0 || view != null ? -1 : nativeStep(engine, pixels);
+        return engine == 0 || view != null ? -1 : nativeStep(engine, pixels, takeKeys());
     }
 
-    // No input yet.
+    // Isolated: a pointer lifted is a tap.
     @Override public void onPointerMove(int x, int y) {}
-    @Override public void onPointerUp(int x, int y) {}
+    @Override public void onPointerUp(int x, int y) { tapped = true; }
+
+    /** Enginehost's standard actions (after the person's own remapping) to Wolf's keys. */
+    @Override
+    public boolean onControllerEvent(EngineControllerEvent event) {
+        switch (event.action()) {
+            case "confirm": setKey(KEY_CONFIRM, event.pressed()); return true;
+            case "cancel":
+            case "menu": setKey(KEY_CANCEL, event.pressed()); return true;
+            case "skip": setKey(KEY_SUB, event.pressed()); return true;
+            case "up": setKey(KEY_UP, event.pressed()); return true;
+            case "down": setKey(KEY_DOWN, event.pressed()); return true;
+            case "left": setKey(KEY_LEFT, event.pressed()); return true;
+            case "right": setKey(KEY_RIGHT, event.pressed()); return true;
+            case "left_x":
+                setKey(KEY_LEFT, event.value() < -0.5f);
+                setKey(KEY_RIGHT, event.value() > 0.5f);
+                return true;
+            case "left_y":
+                setKey(KEY_UP, event.value() < -0.5f);
+                setKey(KEY_DOWN, event.value() > 0.5f);
+                return true;
+            default:
+                return false;
+        }
+    }
 
     @Override
     public void onResume() {
@@ -134,10 +194,10 @@ public final class WolfPlugin implements EnginePlugin, EngineStepDriven {
     static native String nativeError();
     static native int nativeWidth(long engine);
     static native int nativeHeight(long engine);
-    static native int nativeStep(long engine, int[] pixels);
+    static native int nativeStep(long engine, int[] pixels, int keys);
     static native void nativeStop(long engine);
     static native void nativeGlCreated(long engine);
     static native void nativeGlSize(long engine, int width, int height);
-    static native void nativeGlDraw(long engine, long nowNs);
+    static native void nativeGlDraw(long engine, long nowNs, int keys);
     static native void nativePause(long engine, boolean paused);
 }

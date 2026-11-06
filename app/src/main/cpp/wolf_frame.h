@@ -21,14 +21,16 @@ typedef struct wolf_frame wolf_frame;
 /* g and vm must outlive the frame loop; vm was made for g (common events and databases set).
  * audio_rate: the output sample rate, or 0 for no sound. NULL when out of memory. */
 wolf_frame *wolf_frame_start(const char *folder, wolf_open_game *g, wolf_vm *vm, uint32_t audio_rate);
-/* One game frame (1/60 s): events and pictures move on. */
-void wolf_frame_run(wolf_frame *f);
-/* The pictures as quads, lowest number first (vm.h, wolf_picture_quads). */
+/* One game frame (1/60 s) with the keys held (WOLF_KEY_*): the window answers, events and pictures
+ * move on. */
+void wolf_frame_run(wolf_frame *f, uint32_t keys);
+/* What is drawn, as quads: pictures up to 99999, the message window, then pictures from 100000
+ * (the manual's bands, 04ev_picture.html). */
 void wolf_frame_quads(wolf_frame *f, wolf_quad_fn fn, void *ctx);
-/* The pictures drawn in software into pixels (width * height, 0xFFRRGGBB), the game's screen size. */
+/* The same, drawn in software into pixels (width * height, 0xFFRRGGBB), the game's screen size. */
 void wolf_frame_draw(wolf_frame *f, uint32_t *pixels);
 /* wolf_frame_run, then wolf_frame_draw: the isolated, step-driven path. */
-void wolf_frame_step(wolf_frame *f, uint32_t *pixels);
+void wolf_frame_step(wolf_frame *f, uint32_t keys, uint32_t *pixels);
 /* The next frames of sound (interleaved stereo int16); silence without sound. */
 void wolf_frame_audio(wolf_frame *f, int16_t *out, uint32_t frames);
 void wolf_frame_stop(wolf_frame *f);
