@@ -102,6 +102,31 @@ From the editor's manual, help/02commonev.html [V], unless marked:
 - **Order:** once a frame, in file order, before the map's events [R: the reference runs them
   first].
 
+## Starting a game (`core/src/wolf_mapdraw.c`)
+
+- **The start position** is the system database's type 7, row 0 ("初期位置": map, X, Y in tiles)
+  [V: manual 03mapstartpos.html; the owner's games carry this row, e.g. Living With Sister: map
+  0, X -1, Y 0, a title map with the hero off it [D]].
+- **A map's file** is the system database's type 0, the map's row, its first field: a path under
+  `Data/` (`MapData/TitleMap.mps`) [D; mruby-wolf reads it the same way [R]]. The same row also
+  names the map's BGM and BGS, not used yet.
+
+## Drawing the map (`core/src/wolf_mapdraw.c`)
+
+- The tile layers are drawn in order, each tile through `wolf_tile_pieces` (formats.md, "Drawing
+  tiles"), with the tile size from Game.dat's setting 0 [R] (16 in Living With Sister, 32 in
+  Asuka [D]). Only the tiles on screen are made into quads.
+- **Autotiles** animate one column every 20 frames, or every N for `_FRAME=N` [V]. Every
+  autotile counts from the start of play [M].
+- **The camera** centres the start position (later the hero) and stays inside the map; a map
+  smaller than the screen is centred [M].
+- **Bands** [V, manual 04ev_picture.html]: the map sits above pictures numbered -300,000 and
+  below, and below the rest. The chips the tileset marks as "above characters" (★) belong higher,
+  between the -100,000 band and the -1 band; they are drawn with the rest for now [M], as there
+  are no characters yet.
+- **Not built:** characters (the hero, events), fog and the panorama (遠景), map scrolling and
+  loops, and tile changes at run time.
+
 ## Not built yet
 
 Hero position and movement, event movement and routes, the checked and touch triggers, and
