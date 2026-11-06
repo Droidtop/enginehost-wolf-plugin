@@ -103,7 +103,7 @@ static void fresh(void) {
     clear();
 }
 
-static const wolf_render_source SRC = {NULL, load};
+static const wolf_render_source SRC = {NULL, load, NULL};
 
 static void test_place_and_pieces(void) {
     fresh();

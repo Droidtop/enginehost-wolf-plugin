@@ -38,12 +38,13 @@ static void place(const placement *pl, double lx, double ly, double *X, double *
     *Y = pl->y + dx * pl->s + dy * pl->c;
 }
 
-/* One quad: the picture-space rectangle l (x0, y0, x1, y1) shows the image rectangle u. */
-static void emit(const wolf_picture *p, const wolf_image *im, const placement *pl, const double l[4],
-                 const double u[4], wolf_quad_fn fn, void *ctx) {
+/* One quad: the picture-space rectangle l (x0, y0, x1, y1) shows the image rectangle u of file.
+ * rgb tints it (a text colour; 0xFFFFFF leaves it as it is). */
+static void emit_as(const wolf_picture *p, const char *file, const wolf_image *im, uint32_t rgb, const placement *pl,
+                    const double l[4], const double u[4], wolf_quad_fn fn, void *ctx) {
     if (l[2] <= l[0] || l[3] <= l[1] || u[2] <= u[0] || u[3] <= u[1]) return;
     wolf_quad q;
-    q.file = p->content;
+    q.file = file;
     q.image = im;
     place(pl, l[0], l[1], &q.x[0], &q.y[0]);
     place(pl, l[2], l[1], &q.x[1], &q.y[1]);
@@ -55,12 +56,57 @@ static void emit(const wolf_picture *p, const wolf_image *im, const placement *p
     q.v1 = u[3];
     double o = p->opacity < 0 ? 0 : p->opacity > 255 ? 255 : p->opacity;
     q.opacity = o / 255.0;
-    q.r = p->r / 100.0;
-    q.g = p->g / 100.0;
-    q.b = p->b / 100.0;
+    q.r = p->r / 100.0 * ((rgb >> 16) & 255) / 255.0;
+    q.g = p->g / 100.0 * ((rgb >> 8) & 255) / 255.0;
+    q.b = p->b / 100.0 * (rgb & 255) / 255.0;
     q.blend = p->blend;
     q.number = p->number;
     fn(ctx, &q);
+}
+
+static void emit(const wolf_picture *p, const wolf_image *im, const placement *pl, const double l[4],
+                 const double u[4], wolf_quad_fn fn, void *ctx) {
+    emit_as(p, p->content, im, 0xFFFFFFu, pl, l, u, fn, ctx);
+}
+
+static void set_placement(placement *pl, const wolf_picture *p, double sw, double sh) {
+    double fx, fy;
+    anchor_at(p->anchor, &fx, &fy);
+    double th = p->angle / 10.0 * PI / 180.0;
+    pl->x = p->x;
+    pl->y = p->y;
+    pl->ax = fx * sw;
+    pl->ay = fy * sh;
+    pl->zx = p->zoom_x / 100.0;
+    pl->zy = p->zoom_y / 100.0;
+    pl->c = cos(th);
+    pl->s = sin(th);
+}
+
+/* A text picture: laid out once to learn its size (the anchor needs it), then each glyph as a quad. */
+typedef struct {
+    const wolf_picture *p;
+    const placement *pl;
+    wolf_quad_fn fn;
+    void *ctx;
+} text_out;
+
+static void glyph_quad(void *ctx, const wolf_glyph *g, double x, double y, uint32_t rgb) {
+    const text_out *t = ctx;
+    const double l[4] = {x, y, x + g->image->width, y + g->image->height};
+    const double u[4] = {0, 0, g->image->width, g->image->height};
+    emit_as(t->p, g->key, g->image, rgb, t->pl, l, u, t->fn, t->ctx);
+}
+
+static void text_quads(const wolf_vm *vm, const wolf_render_source *src, const wolf_picture *p, wolf_quad_fn fn,
+                       void *ctx) {
+    double w = 0, h = 0;
+    wolf_vm *mvm = (wolf_vm *)vm; /* layout logs once and reads the colour table; nothing else */
+    wolf_text_layout(mvm, src, p->content, WOLF_TEXT_SIZE, NULL, NULL, &w, &h);
+    placement pl;
+    set_placement(&pl, p, w, h);
+    text_out t = {p, &pl, fn, ctx};
+    wolf_text_layout(mvm, src, p->content, WOLF_TEXT_SIZE, glyph_quad, &t, NULL, NULL);
 }
 
 void wolf_picture_quads(const wolf_vm *vm, const wolf_render_source *src, int32_t from, int32_t to, wolf_quad_fn fn,
@@ -69,8 +115,12 @@ void wolf_picture_quads(const wolf_vm *vm, const wolf_render_source *src, int32_
     for (uint32_t i = 0; i < wolf_vm_picture_count(vm); i++) {
         const wolf_picture *p = wolf_vm_picture_at(vm, i);
         if (p->number < from || p->number > to) continue;
-        if (p->kind == WOLF_PIC_TEXT || !p->content || p->content[0] == '<') continue; /* not yet */
-        if (p->zoom_x == 0 || p->zoom_y == 0) continue;
+        if (p->zoom_x == 0 || p->zoom_y == 0 || !p->content) continue;
+        if (p->kind == WOLF_PIC_TEXT) {
+            if (src->glyph) text_quads(vm, src, p, fn, ctx);
+            continue;
+        }
+        if (p->content[0] == '<') continue; /* the special names: not yet */
         const wolf_image *im = src->image(src->ctx, p->content);
         if (!im || !im->argb || !im->width || !im->height) continue;
         double sw, sh, ox = 0, oy = 0;
@@ -91,17 +141,7 @@ void wolf_picture_quads(const wolf_vm *vm, const wolf_render_source *src, int32_
             oy = (double)(piece / dx) * sh;
         }
         placement pl;
-        double fx, fy;
-        anchor_at(p->anchor, &fx, &fy);
-        double th = p->angle / 10.0 * PI / 180.0;
-        pl.x = p->x;
-        pl.y = p->y;
-        pl.ax = fx * sw;
-        pl.ay = fy * sh;
-        pl.zx = p->zoom_x / 100.0;
-        pl.zy = p->zoom_y / 100.0;
-        pl.c = cos(th);
-        pl.s = sin(th);
+        set_placement(&pl, p, sw, sh);
         if (!window) {
             const double l[4] = {0, 0, sw, sh}, u[4] = {ox, oy, ox + sw, oy + sh};
             emit(p, im, &pl, l, u, fn, ctx);

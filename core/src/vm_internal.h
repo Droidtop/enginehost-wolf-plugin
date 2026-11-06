@@ -15,7 +15,8 @@ enum {
     ONCE_DB, ONCE_CHARA, ONCE_RANGE_1500000, ONCE_MAP_EVENT_CALL, ONCE_NAME_ESCAPE,
     ONCE_STRING_OP, ONCE_BAD_ARGS, ONCE_LABEL, ONCE_DB_MISSING, ONCE_DB_KIND, ONCE_DB_OP,
     ONCE_DB_NAME, ONCE_TEXT_XY, ONCE_TEXT_LONG, ONCE_STR_SOURCE, ONCE_STR_FILE, ONCE_STR_EXT,
-    ONCE_UI_HEADLESS, ONCE_UI_EXTRA, ONCE_PIC_TRANSFORM, ONCE_PIC_LIMIT, ONCE_PIC_OP, ONCE_SOUND, ONCE_SOUND_DB, ONCE_COUNT
+    ONCE_UI_HEADLESS, ONCE_UI_EXTRA, ONCE_PIC_TRANSFORM, ONCE_PIC_LIMIT, ONCE_PIC_OP, ONCE_SOUND, ONCE_SOUND_DB, ONCE_TEXT_CODE, ONCE_TEXT_SJIS,
+    ONCE_COUNT
 };
 
 struct wolf_vm {
@@ -114,6 +115,14 @@ void wolf_pictures_free(wolf_vm *vm);
 /* After a construct's opener c (flow.c): on to just past the nth (0-based) marker with this code
  * at c's indent, or past the branch end when there is none. 1 when the marker was found. */
 int wolf_flow_to_marker(wolf_thread *t, const wolf_cmd *c, int32_t code, uint32_t nth);
+
+/* Laying out text (textlay.c): each glyph's image top left in the text's own space, its colour
+ * 0xRRGGBB. width and height (either may be NULL) get the text's size. */
+typedef void (*wolf_text_fn)(void *ctx, const wolf_glyph *g, double x, double y, uint32_t rgb);
+#define WOLF_TEXT_SIZE 18     /* the size before any \f[] [M: the runtime's default is Unknown] */
+#define WOLF_TEXT_SPACING 4   /* pixels between lines before any \space[] [M] */
+void wolf_text_layout(wolf_vm *vm, const wolf_render_source *src, const char *text, uint32_t size,
+                      wolf_text_fn fn, void *ctx, double *width, double *height);
 
 /* Text (text.c). The longest text the core builds; longer results are cut there, logged once. */
 #define WOLF_TEXT_MAX (4u << 20)

@@ -185,11 +185,25 @@ typedef struct {
     uint32_t width, height;
     const uint32_t *argb; /* width * height pixels, 0xAARRGGBB, not premultiplied */
 } wolf_image;
+/* One glyph, as the plugin's font source draws it: white, its shape in the alpha. */
+typedef struct {
+    const char *key;          /* names this bitmap for texture caches (font, size and character) */
+    const wolf_image *image;  /* NULL for a glyph with nothing to draw (a space) */
+    int32_t left, top;        /* the image's top left from the pen, top measured up from the baseline */
+    int32_t advance;          /* how far the pen moves */
+    int32_t ascent;           /* the font's ascent at this size: the baseline sits this far below a line's top */
+} wolf_glyph;
+
 typedef struct {
     void *ctx;
     /* The image for a file named relative to Data/, or NULL when there is none. It must stay
      * valid until wolf_render_pictures returns. */
     const wolf_image *(*image)(void *ctx, const char *file);
+    /* A glyph of Unicode character cp at size pixels in font (0 the game's main font, 1-3 its
+     * sub-fonts: Game.dat texts 3-6, the manual's ont[]), or NULL when no font has it. Which
+     * file draws it is the plugin's choice (fonts are pluggable: the game's, the core's, a
+     * default set). May be NULL: text pictures are then not drawn. */
+    const wolf_glyph *(*glyph)(void *ctx, uint32_t font, uint32_t size, uint32_t cp);
 } wolf_render_source;
 /* Draws the pictures numbered from..to (inclusive), lowest first, onto frame (width * height
  * opaque 0xFFRRGGBB pixels). File and window pictures are drawn; text pictures and the special
