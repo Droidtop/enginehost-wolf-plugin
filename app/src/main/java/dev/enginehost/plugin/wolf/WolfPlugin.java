@@ -24,7 +24,7 @@ import java.io.IOException;
 public final class WolfPlugin implements EnginePlugin, EngineStepDriven {
     static {
         try {
-            System.loadLibrary("main");
+            System.loadLibrary("wolfrpg");
         } catch (UnsatisfiedLinkError e) {
             // Under isolation the host loads the library from a descriptor and binds these
             // natives itself (enginehost_register_natives); System.loadLibrary cannot find it

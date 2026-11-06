@@ -13,7 +13,7 @@ that builds a bundle.
   `docs/engine-sandbox.md`). The host calls `step()` once a frame and draws the pixels it fills.
 - `app/src/main/cpp/`: `wolf_open.c` finds and loads a game's project data with the core's
   loaders; `wolf_enginehost.c` is the JNI side, bound by `enginehost_register_natives`. One
-  library, `libmain.so`, for arm64-v8a and x86_64, with the core linked in statically.
+  library, `libwolfrpg.so`, for arm64-v8a and x86_64, with the core linked in statically.
 - `plugin-native/`: Enginehost's file layer, copied verbatim from Enginehost. Every libc file call
   in the library goes through the host's broker, so the core reads only the game folder it is
   handed. The bundle does not write the game folder yet (`writesGameFolder: false`).
