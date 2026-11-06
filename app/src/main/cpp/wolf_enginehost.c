@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "vm.h"
 #include "wolf_open.h"
 
 #define TAG "wolf"
@@ -21,6 +22,7 @@
 
 typedef struct {
     wolf_open_game game;
+    wolf_vm *vm; /* holds pointers into game: freed first */
     int drawn;
 } engine;
 
@@ -30,6 +32,30 @@ static void LogLine(void *ctx, const char *line)
 {
     (void)ctx;
     __android_log_print(ANDROID_LOG_INFO, TAG, "%s", line);
+}
+
+static void VmLog(void *ctx, int level, const char *message)
+{
+    (void)ctx;
+    int prio = level >= WOLF_LOG_ERROR ? ANDROID_LOG_ERROR : level >= WOLF_LOG_WARN ? ANDROID_LOG_WARN
+             : level >= WOLF_LOG_INFO ? ANDROID_LOG_INFO : ANDROID_LOG_DEBUG;
+    __android_log_print(prio, TAG, "%s", message);
+}
+
+/* The interpreter over the loaded game: its common events, and the three databases, which
+ * command 250 and the database call values read and write in place (the core's
+ * wolf_vm_set_databases). 0 when out of memory. */
+static wolf_vm *StartVm(engine *e)
+{
+    wolf_config cfg;
+    wolf_game_config(&e->game.game, &cfg);
+    wolf_host host = {NULL, VmLog};
+    wolf_vm *vm = wolf_vm_create(&host, &cfg);
+    if (!vm) return NULL;
+    wolf_vm_set_common_events(vm, e->game.commons.table, e->game.commons.count);
+    wolf_vm_set_databases(vm, &e->game.db[WOLF_OPEN_DB_USER], &e->game.db[WOLF_OPEN_DB_CHANGEABLE],
+                          &e->game.db[WOLF_OPEN_DB_SYSTEM]);
+    return vm;
 }
 
 static jlong JNICALL NativeStart(JNIEnv *env, jclass cls, jstring gamePath)
@@ -50,9 +76,15 @@ static jlong JNICALL NativeStart(JNIEnv *env, jclass cls, jstring gamePath)
         wolf_open_free(&e->game);
         free(e);
         e = NULL;
+    } else if (!(e->vm = StartVm(e))) {
+        snprintf(gError, sizeof gError, "Out of memory starting the Wolf core.");
+        wolf_open_free(&e->game);
+        free(e);
+        e = NULL;
     } else {
-        __android_log_print(ANDROID_LOG_INFO, TAG, "loaded from %s; the interpreter is not run yet, so the "
-                            "screen stays black", e->game.source);
+        __android_log_print(ANDROID_LOG_INFO, TAG, "loaded from %s; interpreter ready with %u common events and "
+                            "the databases; nothing runs yet, so the screen stays black", e->game.source,
+                            e->game.commons.count);
     }
     (*env)->ReleaseStringUTFChars(env, gamePath, folder);
     return (jlong)(intptr_t)e;
@@ -96,6 +128,7 @@ static void JNICALL NativeStop(JNIEnv *env, jclass cls, jlong handle)
 {
     (void)env; (void)cls;
     engine *e = (engine *)(intptr_t)handle;
+    wolf_vm_destroy(e->vm);
     wolf_open_free(&e->game);
     free(e);
 }
