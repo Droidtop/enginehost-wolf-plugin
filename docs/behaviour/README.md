@@ -21,3 +21,4 @@ Pages:
 - `risks.md`: everything the runtime does that could be abused, and the core's answer to each.
 - `saves.md`: what a save holds and when it is written, and why the core uses its own format.
 - `drawing.md`: how pictures (and later text, tiles and characters) become pixels in software.
+- `sound.md`: how BGM, BGS and sound effects are mixed.
