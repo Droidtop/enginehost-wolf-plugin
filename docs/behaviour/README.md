@@ -19,3 +19,4 @@ Pages:
 - `commands.md`: the event interpreter and each command built.
 - `maps.md`: which page a map event shows, and the automatic and parallel runs.
 - `risks.md`: everything the runtime does that could be abused, and the core's answer to each.
+- `saves.md`: what a save holds and when it is written, and why the core uses its own format.
