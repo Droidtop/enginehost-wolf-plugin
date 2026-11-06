@@ -133,6 +133,16 @@ int wolf_h_if_string(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c) {
     return WOLF_NEXT;
 }
 
+int wolf_flow_to_marker(wolf_thread *t, const wolf_cmd *c, int32_t code, uint32_t nth) {
+    wolf_call *call = top(t);
+    for (;;) {
+        if (!seek(call, c->indent, is_case_or_end)) return 0;
+        int32_t got = call->list->cmds[call->pc - 1].code;
+        if (got == 499) return 0;
+        if (got == code && nth-- == 0) return 1;
+    }
+}
+
 /* A case or else marker reached by running: the chosen body has ended, so the rest of the
  * construct is skipped. */
 int wolf_h_case(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c) {

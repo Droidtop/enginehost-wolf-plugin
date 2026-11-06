@@ -28,18 +28,6 @@ static int h_nothing(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c) { /* 0, 99,
     return WOLF_NEXT;
 }
 
-static int h_stop_choices(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c) { /* 104 */
-    (void)t; (void)c;
-    vm->flag_stop_choices = 1;
-    return WOLF_NEXT;
-}
-
-static int h_stop_message(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c) { /* 105 */
-    (void)t; (void)c;
-    vm->flag_stop_message = 1;
-    return WOLF_NEXT;
-}
-
 /* 106: the runtime can raise a modal "Message" box here. The core never blocks: it logs. */
 static int h_debug_text(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c) {
     (void)t;
@@ -55,8 +43,10 @@ static void init_table(void) {
     table[0] = h_nothing;
     table[99] = h_nothing;
     table[103] = h_nothing;
-    table[104] = h_stop_choices;
-    table[105] = h_stop_message;
+    table[101] = wolf_h_message;
+    table[102] = wolf_h_choices;
+    table[104] = wolf_h_stop_choices;
+    table[105] = wolf_h_stop_message;
     table[106] = h_debug_text;
     table[111] = wolf_h_if_number;
     table[112] = wolf_h_if_string;

@@ -15,7 +15,7 @@ enum {
     ONCE_DB, ONCE_CHARA, ONCE_RANGE_1500000, ONCE_MAP_EVENT_CALL, ONCE_NAME_ESCAPE,
     ONCE_STRING_OP, ONCE_BAD_ARGS, ONCE_LABEL, ONCE_DB_MISSING, ONCE_DB_KIND, ONCE_DB_OP,
     ONCE_DB_NAME, ONCE_TEXT_XY, ONCE_TEXT_LONG, ONCE_STR_SOURCE, ONCE_STR_FILE, ONCE_STR_EXT,
-    ONCE_COUNT
+    ONCE_UI_HEADLESS, ONCE_UI_EXTRA, ONCE_COUNT
 };
 
 struct wolf_vm {
@@ -42,7 +42,18 @@ struct wolf_vm {
     uint32_t rng;
 
     struct wolf_db *db[3]; /* WOLF_DB_USER, WOLF_DB_CHANGEABLE, WOLF_DB_SYSTEM; not owned */
+
+    /* the window (ui.c): one at a time */
+    wolf_ui ui;
+    int has_ui;
+    int ui_kind;                 /* UI_NONE, UI_MESSAGE, UI_CHOICES */
+    const wolf_thread *ui_owner; /* the thread waiting on it, and the command it waits in */
+    const wolf_cmd *ui_cmd;
+    int ui_answered;
+    int32_t ui_result;           /* the choice, -1 cancelled, -2 force-stopped */
 };
+
+enum { UI_NONE, UI_MESSAGE, UI_CHOICES };
 
 /* The three databases, in the order of their call values (06valueget): 10 user, 11 changeable,
  * 13 system. */
@@ -86,6 +97,14 @@ int wolf_h_call(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);           /* 21
 int wolf_h_call_by_name(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);   /* 300 */
 int wolf_h_database(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);       /* 250 */
 int wolf_h_set_string(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);     /* 122 */
+int wolf_h_message(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);        /* 101 */
+int wolf_h_choices(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);        /* 102 */
+int wolf_h_stop_choices(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);   /* 104 */
+int wolf_h_stop_message(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);   /* 105 */
+
+/* After a construct's opener c (flow.c): on to just past the nth (0-based) marker with this code
+ * at c's indent, or past the branch end when there is none. 1 when the marker was found. */
+int wolf_flow_to_marker(wolf_thread *t, const wolf_cmd *c, int32_t code, uint32_t nth);
 
 /* Text (text.c). The longest text the core builds; longer results are cut there, logged once. */
 #define WOLF_TEXT_MAX (4u << 20)

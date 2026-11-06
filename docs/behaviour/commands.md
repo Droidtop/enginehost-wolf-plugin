@@ -43,8 +43,10 @@ it keeps, so a list does not depend on the buffer it came from.
 | 0, 99 | Blank / checkpoint: nothing | [V], [R] |
 | -1 | End of the list | [V] |
 | 103 | Comment: nothing | [V] |
-| 104 | Sets the force-stop-choices flag other handlers read | [V] local lane |
-| 105 | Sets the force-stop-message flag | [V] local lane |
+| 101 | Show a message, and wait for it to close | manual 04ev_text, [D] |
+| 102 | Choices, and their branches | manual 04ev_select, [D], [R] |
+| 104 | Force a choice list shut (its forced branch); sets the force-stop-choices flag | manual 04ev_select |
+| 105 | Force a message shut; sets the force-stop-message flag | manual 04ev_text |
 | 106 | Debug text: logged, never a blocking dialog | [V] local lane, risks.md |
 | 111 | Number condition and its branch | [R] |
 | 112 | String condition and its branch | [R] |
@@ -317,9 +319,45 @@ assignment):
     the rest kept, Base64, remove display codes) must be among them; their numbers are
     **Unknown**.
 
+## Messages and choices: 101, 102, 104, 105 (`core/src/ui.c`)
+
+The plugin draws the window; the core says what to show and waits for the answer
+(`wolf_ui` in vm.h: `message`, `choices`, `close`; answers through `wolf_vm_message_closed` and
+`wolf_vm_choice_made`).
+
+- **101** [V, manual 04ev_text]: one text (all 43,207 real ones [D]), with the substitution
+  codes replaced (see "Text"). Display codes (`\c[]`, `\f[]`, `\!`, `\.`, `\r[,]`...) are passed
+  through for the drawing to act on. A first line that is "@" and a number alone sets system
+  variable 0 (the face graphic number) and is not shown (13,611 real messages start that way
+  [D]). The thread waits in the command, frame after frame, until the message is closed.
+- **102** [V, manual 04ev_select; layout [R], checked on all 941 real ones [D]]: one number,
+  with the choice count in its low four bits, and one text per choice.
+  - **Cancel**, bits 4-7: 0 goes to a separate cancel branch (421). The 304 real lists with 0
+    carry exactly the 304 real 421 markers [D]. 1 disables the cancel key. 2 + n acts as if
+    choice n were picked; a value naming no choice is taken as disabled [M].
+  - **Extra branches**, bits 8-10: left key, right key, forced stop. Each set bit has its own
+    402 marker after the choices, in that bit order. The 4 real lists with left/right bits
+    carry exactly the 6 real 402s [D]; the order is [M]. Left/right are not built, so those
+    branches are never taken (logged once).
+  - Choice texts have their codes replaced. A text that ends up empty is not shown but keeps
+    its place, so choice n is still the nth 401 marker [V]. When every text is empty, the whole
+    command is skipped [V].
+  - The answer goes to the body after the nth 401. An answer the list cannot have (out of
+    range, or a cancel while cancel is disabled) skips past the branch end, logged once [M].
+- **104** [V, 04ev_select]: a choice list that is up is taken down and its forced branch is
+  taken, or the construct is left when it has none [M]. **105** [V, 04ev_text]: a message that
+  is up closes as if the player had closed it. The manual says both only work from parallel
+  events; the core lets any thread do it [M].
+- **One window at a time** [M]: a second thread that reaches 101 or 102 while one is up waits
+  its turn.
+- **Headless** (no UI set): a message is logged and closes at once; a choice list takes its
+  first shown entry, logged. That keeps tests and the AVD's first runs moving.
+- **Unknown:** how the runtime lays out and pages text, and the key timing. That belongs to
+  the drawing, built next, and to comparison runs.
+
 ## Not built yet
 
-Messages and choices (101, 102), pictures (150), sound (140), the database operations
+Pictures (150), sound (140), the database operations
 beyond read and write (251, 252, 255-257), 211 (reserved calls), 1000 (24 uses in one 3.x game
 [D], one number and a `.jpg` path under `Save/` or `Data/`: by the strings, saving the screen to a
 picture file; Unknown), starting map event pages by the hero (automatic and parallel pages run: maps.md), string

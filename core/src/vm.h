@@ -119,6 +119,33 @@ void wolf_set_str(wolf_vm *vm, const wolf_thread *t, int32_t ref, const char *va
 /* Runs one frame of a thread. */
 int wolf_vm_run_frame(wolf_vm *vm, wolf_thread *t);
 
+/*
+ * The message window and the choice list (101, 102). The plugin draws them; the core says what
+ * to show and waits for the answer. Without a UI the core runs headless: a message is logged and
+ * closes at once, and a choice takes its first shown entry (logged). docs/behaviour/commands.md,
+ * "Messages and choices".
+ */
+typedef struct {
+    void *ctx;
+    /* Show a message. text has its substitution codes replaced; display codes (\c[], \!, ...)
+     * are left for the drawing. Answer with wolf_vm_message_closed. */
+    void (*message)(void *ctx, const char *text);
+    /* Offer count choices. An empty text is not shown, but keeps its place. cancel: 1 when the
+     * cancel key may be used. Answer with wolf_vm_choice_made. */
+    void (*choices)(void *ctx, const char *const *texts, uint32_t count, int cancel);
+    /* Take the window down without an answer (104, 105 force it). */
+    void (*close)(void *ctx);
+} wolf_ui;
+
+/* NULL for headless. Copied. */
+void wolf_vm_set_ui(wolf_vm *vm, const wolf_ui *ui);
+/* The player closed the message. */
+void wolf_vm_message_closed(wolf_vm *vm);
+/* The player picked choice index (its place among all count texts), or cancelled (-1). */
+void wolf_vm_choice_made(wolf_vm *vm, int32_t index);
+/* 1 while a message or choice list is up and unanswered. */
+int wolf_vm_ui_busy(const wolf_vm *vm);
+
 /* The flags 104 (force-stop choices) and 105 (force-stop message) set. */
 int wolf_vm_flag_stop_choices(const wolf_vm *vm);
 int wolf_vm_flag_stop_message(const wolf_vm *vm);
