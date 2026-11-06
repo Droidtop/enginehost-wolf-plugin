@@ -1,6 +1,8 @@
 /*
- * Sound files to PCM for the core's mixer: Ogg Vorbis (stb_vorbis, from the vendor/stb submodule
- * the images use) and WAV (8- or 16-bit PCM, read here). MP3 and MIDI are not decoded yet.
+ * Sound files to PCM for the core's mixer. All audio and video decoding belongs to Enginehost's
+ * sandboxed FFmpeg decode service (the owner, Droidtop/tracker#906 and #858: "All video and audio
+ * decoding should be handled by the ffmpeg bundle"). Until its API exists the core decodes
+ * nothing itself: every request answers WOLF_DECODE_WAITING, and the game runs silent.
  */
 #ifndef ENGINEHOST_WOLF_DECODE_H
 #define ENGINEHOST_WOLF_DECODE_H
@@ -14,12 +16,10 @@
 extern "C" {
 #endif
 
-#define WOLF_DECODE_FRAMES_MAX (48000u * 60u * 15u) /* 15 minutes at 48 kHz (ours) */
+enum { WOLF_DECODE_OK = 0, WOLF_DECODE_WAITING = 1, WOLF_DECODE_BAD = -1 };
 
-enum { WOLF_DECODE_OK = 0, WOLF_DECODE_UNSUPPORTED = 1, WOLF_DECODE_BAD = -1 };
-
-/* Decodes data (the file called name; the extension picks the decoder) into out, whose stereo
- * buffer the caller frees with free(). */
+/* Will hand data (the file called name) to the decode service and fill out, whose stereo buffer
+ * the caller frees with free(). Today: WOLF_DECODE_WAITING. */
 int wolf_decode_sound(const char *name, const uint8_t *data, size_t len, wolf_pcm *out);
 
 #ifdef __cplusplus

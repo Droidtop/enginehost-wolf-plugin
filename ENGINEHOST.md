@@ -20,7 +20,9 @@ that builds a bundle.
 - `app/src/main/cpp/`:
   - `wolf_open.c` finds and loads a game's project data with the core's loaders;
   - `wolf_files.c` finds the files commands name (loose first, then archives);
-  - `wolf_frame.c` runs the frames and decodes images and sounds;
+  - `wolf_frame.c` runs the frames and decodes images; sounds will be decoded by Enginehost's
+    FFmpeg service (#906), and until its API exists they log "waiting for the decode service"
+    and stay silent;
   - `wolf_enginehost.c` is the JNI side. It's bound by `JNI_OnLoad` in the runtime process, and by
     `enginehost_register_natives` when isolated.
 

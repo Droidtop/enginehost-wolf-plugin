@@ -157,7 +157,9 @@ static const wolf_pcm *sound_for(wolf_frame *f, const char *name) {
     if (wolf_files_read(f->files, name, &data, &len) == 0) {
         int r = wolf_decode_sound(name, data, len, &s->pcm);
         free(data);
-        if (r == WOLF_DECODE_UNSUPPORTED) wolf_vm_log(f->vm, WOLF_LOG_WARN, "sound \"%s\" is in a format not decoded yet", name);
+        /* once per file: the cache remembers a sound it has no PCM for */
+        if (r == WOLF_DECODE_WAITING)
+            wolf_vm_log(f->vm, WOLF_LOG_INFO, "sound \"%s\": waiting for the decode service (#906); silent", name);
         else if (r != WOLF_DECODE_OK) wolf_vm_log(f->vm, WOLF_LOG_WARN, "sound \"%s\" could not be decoded", name);
     }
     f->sound_bytes += (size_t)s->pcm.frames * 4u;
