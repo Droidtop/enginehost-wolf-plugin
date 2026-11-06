@@ -211,8 +211,60 @@ static void test_off_screen_and_odd(void) {
     vm = NULL;
 }
 
+typedef struct {
+    int n;
+    wolf_quad q[16];
+} quads;
+static void collect(void *ctx, const wolf_quad *q) {
+    quads *qs = ctx;
+    if (qs->n < 16) qs->q[qs->n] = *q;
+    qs->n++;
+}
+static int near(double a, double b) { return a - b < 1e-9 && b - a < 1e-9; }
+
+static void test_quads(void) {
+    fresh();
+    buf b = {0};
+    /* piece 2 of a 2x1 split, centred on 10,5, zoom 200, opacity 51, add */
+    show(&b, 3, "quad.png", 2, 1, 2, 51, 10, 5, 200, 0, 1, 1);
+    /* a quarter turn about the top left */
+    show(&b, 1, "quad.png", 1, 1, 1, 255, 8, 2, 100, 900, 0, 0);
+    /* a 12x6 window */
+    cmd(&b, (int32_t[]){opt(0, 3, 0, 0, 0), 2, 0, 12, 6, 1, 255, 0, 0, 100, 0}, 11, "win.png");
+    show(&b, 4, "missing.png", 1, 1, 1, 255, 0, 0, 100, 0, 0, 0); /* no image: no quad */
+    run(&b);
+    quads qs = {0};
+    wolf_picture_quads(vm, &SRC, -1000000, 1000000, collect, &qs);
+    CHECK(qs.n == 1 + 9 + 1);
+    /* lowest number first */
+    CHECK(qs.q[0].number == 1 && qs.q[1].number == 2 && qs.q[10].number == 3);
+    const wolf_quad *t = &qs.q[0];
+    /* source 4x2 at 8,2 turned 90 degrees: x runs down, y runs left */
+    CHECK(near(t->x[0], 8) && near(t->y[0], 2) && near(t->x[1], 8) && near(t->y[1], 6));
+    CHECK(near(t->x[3], 6) && near(t->y[3], 2) && t->u0 == 0 && t->u1 == 4 && t->v1 == 2);
+    const wolf_quad *z = &qs.q[10];
+    /* a 2x2 piece at 200%: 4x4 centred on 10,5; the source is the image's right half */
+    CHECK(near(z->x[0], 8) && near(z->y[0], 3) && near(z->x[2], 12) && near(z->y[2], 7));
+    CHECK(z->u0 == 2 && z->u1 == 4 && z->v0 == 0 && z->v1 == 2);
+    CHECK(near(z->opacity, 0.2) && near(z->r, 1) && z->blend == 1 && z->image == &quad && !strcmp(z->file, "quad.png"));
+    /* the window: corners 2x2 at the corners, the middle stretched over 8x2 from the image's 2x2 */
+    const wolf_quad *w0 = &qs.q[1], *mid = &qs.q[1 + 4], *last = &qs.q[1 + 8];
+    CHECK(near(w0->x[0], 0) && near(w0->x[2], 2) && near(w0->y[2], 2) && w0->u1 == 2 && w0->v1 == 2);
+    CHECK(near(mid->x[0], 2) && near(mid->x[2], 10) && near(mid->y[0], 2) && near(mid->y[2], 4));
+    CHECK(mid->u0 == 2 && mid->u1 == 4 && mid->v0 == 2 && mid->v1 == 4);
+    CHECK(near(last->x[2], 12) && near(last->y[2], 6) && last->u0 == 4 && last->u1 == 6);
+    /* a range of numbers, and no callback */
+    qs.n = 0;
+    wolf_picture_quads(vm, &SRC, 3, 3, collect, &qs);
+    CHECK(qs.n == 1);
+    wolf_picture_quads(vm, &SRC, 0, 10, NULL, NULL);
+    wolf_vm_destroy(vm);
+    vm = NULL;
+}
+
 int main(void) {
     images();
+    test_quads();
     test_place_and_pieces();
     test_zoom_flip_turn();
     test_blends();

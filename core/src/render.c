@@ -1,9 +1,10 @@
 /*
- * Drawing pictures in software. Wolf's own runtime draws through DX Library on Direct3D; the
- * core draws into the frame Enginehost's isolated process hands it (an isolated core has no GL:
- * Enginehost docs/engine-sandbox.md). What each picture setting means is from the manual,
- * help/04ev_picture.html; how the core turns it into pixels is in docs/behaviour/drawing.md,
- * with each choice marked.
+ * Pictures as quads, and the software renderer that draws them. Wolf's own runtime draws through
+ * DX Library on Direct3D. The core turns each picture into textured quads once
+ * (wolf_picture_quads); the plugin's GLES renderer draws those, and so does the software renderer
+ * here, which is the fallback where no GPU path is available (Droidtop/tracker#858). What each
+ * picture setting means is from the manual, help/04ev_picture.html; how the core turns it into
+ * geometry and pixels is in docs/behaviour/drawing.md, with each choice marked.
  */
 #include "vm_internal.h"
 
@@ -25,49 +26,114 @@ static void anchor_at(int anchor, double *fx, double *fy) {
     }
 }
 
-/* What a picture shows, as a sampling rule over a source size. */
+/* The picture's own space to the screen: the anchor at (x, y), then zoom, then a turn about the
+ * anchor [M]. */
 typedef struct {
-    const wolf_image *img;
-    int window;
-    uint32_t sw, sh;  /* the picture's size before zoom */
-    uint32_t ox, oy;  /* the piece's corner in the image (file pictures) */
-    uint32_t cell_w, cell_h; /* the image's 3x3 cells (windows) */
-} source;
+    double x, y, ax, ay, zx, zy, c, s;
+} placement;
 
-/* One window axis: a corner cell at each end, the middle stretched [M]. */
-static uint32_t window_axis(uint32_t at, uint32_t size, uint32_t cell, uint32_t image) {
-    if (at < cell) return at;
-    if (at >= size - cell) return image - (size - at);
-    uint32_t mid = size - 2 * cell, imid = image - 2 * cell;
-    return cell + (uint32_t)((uint64_t)(at - cell) * imid / (mid ? mid : 1));
+static void place(const placement *pl, double lx, double ly, double *X, double *Y) {
+    double dx = (lx - pl->ax) * pl->zx, dy = (ly - pl->ay) * pl->zy;
+    *X = pl->x + dx * pl->c - dy * pl->s;
+    *Y = pl->y + dx * pl->s + dy * pl->c;
 }
 
-static uint32_t sample(const source *s, uint32_t u, uint32_t v) {
-    const wolf_image *im = s->img;
-    uint32_t x, y;
-    if (s->window) {
-        x = window_axis(u, s->sw, s->cell_w, im->width);
-        y = window_axis(v, s->sh, s->cell_h, im->height);
-    } else {
-        x = s->ox + u;
-        y = s->oy + v;
+/* One quad: the picture-space rectangle l (x0, y0, x1, y1) shows the image rectangle u. */
+static void emit(const wolf_picture *p, const wolf_image *im, const placement *pl, const double l[4],
+                 const double u[4], wolf_quad_fn fn, void *ctx) {
+    if (l[2] <= l[0] || l[3] <= l[1] || u[2] <= u[0] || u[3] <= u[1]) return;
+    wolf_quad q;
+    q.file = p->content;
+    q.image = im;
+    place(pl, l[0], l[1], &q.x[0], &q.y[0]);
+    place(pl, l[2], l[1], &q.x[1], &q.y[1]);
+    place(pl, l[2], l[3], &q.x[2], &q.y[2]);
+    place(pl, l[0], l[3], &q.x[3], &q.y[3]);
+    q.u0 = u[0];
+    q.v0 = u[1];
+    q.u1 = u[2];
+    q.v1 = u[3];
+    double o = p->opacity < 0 ? 0 : p->opacity > 255 ? 255 : p->opacity;
+    q.opacity = o / 255.0;
+    q.r = p->r / 100.0;
+    q.g = p->g / 100.0;
+    q.b = p->b / 100.0;
+    q.blend = p->blend;
+    q.number = p->number;
+    fn(ctx, &q);
+}
+
+void wolf_picture_quads(const wolf_vm *vm, const wolf_render_source *src, int32_t from, int32_t to, wolf_quad_fn fn,
+                        void *ctx) {
+    if (!src || !src->image || !fn) return;
+    for (uint32_t i = 0; i < wolf_vm_picture_count(vm); i++) {
+        const wolf_picture *p = wolf_vm_picture_at(vm, i);
+        if (p->number < from || p->number > to) continue;
+        if (p->kind == WOLF_PIC_TEXT || !p->content || p->content[0] == '<') continue; /* not yet */
+        if (p->zoom_x == 0 || p->zoom_y == 0) continue;
+        const wolf_image *im = src->image(src->ctx, p->content);
+        if (!im || !im->argb || !im->width || !im->height) continue;
+        double sw, sh, ox = 0, oy = 0;
+        int window = p->kind == WOLF_PIC_WINDOW;
+        if (window) {
+            if (p->div_x <= 0 || p->div_y <= 0 || p->div_x > 16384 || p->div_y > 16384) continue;
+            sw = p->div_x;
+            sh = p->div_y;
+        } else {
+            uint32_t dx = p->div_x > 0 ? (uint32_t)p->div_x : 1, dy = p->div_y > 0 ? (uint32_t)p->div_y : 1;
+            if (dx > im->width) dx = im->width;
+            if (dy > im->height) dy = im->height;
+            sw = (double)(im->width / dx);
+            sh = (double)(im->height / dy);
+            uint32_t piece = p->pattern > 0 ? (uint32_t)p->pattern - 1 : 0;
+            if (piece >= dx * dy) piece = 0; /* a piece the split does not have: the first [M] */
+            ox = (double)(piece % dx) * sw;
+            oy = (double)(piece / dx) * sh;
+        }
+        placement pl;
+        double fx, fy;
+        anchor_at(p->anchor, &fx, &fy);
+        double th = p->angle / 10.0 * PI / 180.0;
+        pl.x = p->x;
+        pl.y = p->y;
+        pl.ax = fx * sw;
+        pl.ay = fy * sh;
+        pl.zx = p->zoom_x / 100.0;
+        pl.zy = p->zoom_y / 100.0;
+        pl.c = cos(th);
+        pl.s = sin(th);
+        if (!window) {
+            const double l[4] = {0, 0, sw, sh}, u[4] = {ox, oy, ox + sw, oy + sh};
+            emit(p, im, &pl, l, u, fn, ctx);
+            continue;
+        }
+        /* a window: the image cut 3x3; corners keep their size, the rest stretch [M]. A window
+         * smaller than its corners shrinks them to fit [M]. */
+        double icw = (double)(im->width / 3), ich = (double)(im->height / 3);
+        double cw = icw * 2 > sw ? sw / 2 : icw, ch = ich * 2 > sh ? sh / 2 : ich;
+        const double lx[4] = {0, cw, sw - cw, sw}, ly[4] = {0, ch, sh - ch, sh};
+        const double ux[4] = {0, icw, im->width - icw, im->width}, uy[4] = {0, ich, im->height - ich, im->height};
+        for (int r = 0; r < 3; r++)
+            for (int k = 0; k < 3; k++) {
+                const double l[4] = {lx[k], ly[r], lx[k + 1], ly[r + 1]}, u[4] = {ux[k], uy[r], ux[k + 1], uy[r + 1]};
+                emit(p, im, &pl, l, u, fn, ctx);
+            }
     }
-    if (x >= im->width || y >= im->height) return 0;
-    return im->argb[(size_t)y * im->width + x];
 }
+
+/* ---- the software renderer --------------------------------------------------------------- */
 
 static uint32_t clamp255(double v) { return v <= 0 ? 0u : v >= 255 ? 255u : (uint32_t)(v + 0.5); }
 
-static uint32_t blend(uint32_t dst, uint32_t src, const wolf_picture *p) {
-    double a = (double)(src >> 24) / 255.0 * (p->opacity < 0 ? 0 : p->opacity > 255 ? 255 : p->opacity) / 255.0;
+static uint32_t blend(uint32_t dst, uint32_t src, const wolf_quad *q) {
+    double a = (double)(src >> 24) / 255.0 * q->opacity;
     if (a <= 0) return dst;
-    double sc[3] = {(double)((src >> 16) & 255) * p->r / 100.0, (double)((src >> 8) & 255) * p->g / 100.0,
-                    (double)(src & 255) * p->b / 100.0};
+    double sc[3] = {(double)((src >> 16) & 255) * q->r, (double)((src >> 8) & 255) * q->g, (double)(src & 255) * q->b};
     double dc[3] = {(double)((dst >> 16) & 255), (double)((dst >> 8) & 255), (double)(dst & 255)};
     uint32_t out[3];
     for (int i = 0; i < 3; i++) {
         double s = sc[i] > 255 ? 255 : sc[i] < 0 ? 0 : sc[i], d = dc[i], r;
-        switch (p->blend) {
+        switch (q->blend) {
         case WOLF_BLEND_ADD: r = d + s * a; break;
         case WOLF_BLEND_SUBTRACT: r = d - s * a; break;
         case WOLF_BLEND_MULTIPLY: r = d + (d * s / 255.0 - d) * a; break;
@@ -78,75 +144,48 @@ static uint32_t blend(uint32_t dst, uint32_t src, const wolf_picture *p) {
     return 0xFF000000u | out[0] << 16 | out[1] << 8 | out[2];
 }
 
-static void draw(const wolf_picture *p, const source *s, uint32_t *frame, uint32_t fw, uint32_t fh) {
-    double zx = p->zoom_x / 100.0, zy = p->zoom_y / 100.0;
-    if (zx == 0 || zy == 0 || s->sw == 0 || s->sh == 0) return;
-    double fx, fy;
-    anchor_at(p->anchor, &fx, &fy);
-    /* the picture's own space: the anchor at the origin, then zoom, then turn about the anchor [M] */
-    double ax = fx * s->sw, ay = fy * s->sh;
-    double th = p->angle / 10.0 * PI / 180.0, c = cos(th), sn = sin(th);
-    /* the bounding box on screen, from the four corners */
-    double minx = 1e18, miny = 1e18, maxx = -1e18, maxy = -1e18;
-    for (int k = 0; k < 4; k++) {
-        double lx = ((k & 1) ? (double)s->sw : 0) - ax, ly = ((k & 2) ? (double)s->sh : 0) - ay;
-        lx *= zx;
-        ly *= zy;
-        double X = p->x + lx * c - ly * sn, Y = p->y + lx * sn + ly * c;
-        if (X < minx) minx = X;
-        if (X > maxx) maxx = X;
-        if (Y < miny) miny = Y;
-        if (Y > maxy) maxy = Y;
+typedef struct {
+    uint32_t *frame;
+    uint32_t w, h;
+} canvas;
+
+/* A quad is a parallelogram: each pixel centre is mapped back into the source rectangle
+ * (nearest pixel) [M: the runtime's filtering is Unknown]. */
+static void draw_quad(void *ctx, const wolf_quad *q) {
+    const canvas *cv = ctx;
+    double e1x = q->x[1] - q->x[0], e1y = q->y[1] - q->y[0], e2x = q->x[3] - q->x[0], e2y = q->y[3] - q->y[0];
+    double det = e1x * e2y - e1y * e2x;
+    if (det == 0) return;
+    double minx = q->x[0], maxx = q->x[0], miny = q->y[0], maxy = q->y[0];
+    for (int k = 1; k < 4; k++) {
+        if (q->x[k] < minx) minx = q->x[k];
+        if (q->x[k] > maxx) maxx = q->x[k];
+        if (q->y[k] < miny) miny = q->y[k];
+        if (q->y[k] > maxy) maxy = q->y[k];
     }
     double x0 = floor(minx), y0 = floor(miny), x1 = ceil(maxx), y1 = ceil(maxy);
     if (x0 < 0) x0 = 0;
     if (y0 < 0) y0 = 0;
-    if (x1 > fw) x1 = fw;
-    if (y1 > fh) y1 = fh;
+    if (x1 > cv->w) x1 = cv->w;
+    if (y1 > cv->h) y1 = cv->h;
+    const wolf_image *im = q->image;
+    double du = q->u1 - q->u0, dv = q->v1 - q->v0;
     for (double Y = y0; Y < y1; Y++) {
         for (double X = x0; X < x1; X++) {
-            /* the pixel's centre back into the picture */
-            double dx = X + 0.5 - p->x, dy = Y + 0.5 - p->y;
-            double lx = (dx * c + dy * sn) / zx + ax, ly = (-dx * sn + dy * c) / zy + ay;
-            if (lx < 0 || ly < 0 || lx >= s->sw || ly >= s->sh) continue;
-            uint32_t *d = &frame[(size_t)Y * fw + (size_t)X];
-            *d = blend(*d, sample(s, (uint32_t)lx, (uint32_t)ly), p);
+            double px = X + 0.5 - q->x[0], py = Y + 0.5 - q->y[0];
+            double a = (px * e2y - py * e2x) / det, b = (e1x * py - e1y * px) / det;
+            if (a < 0 || b < 0 || a >= 1 || b >= 1) continue;
+            uint32_t sx = (uint32_t)(q->u0 + a * du), sy = (uint32_t)(q->v0 + b * dv);
+            if (sx >= im->width || sy >= im->height) continue;
+            uint32_t *d = &cv->frame[(size_t)Y * cv->w + (size_t)X];
+            *d = blend(*d, im->argb[(size_t)sy * im->width + sx], q);
         }
     }
 }
 
 void wolf_render_pictures(const wolf_vm *vm, const wolf_render_source *src, uint32_t *frame, uint32_t width,
                           uint32_t height, int32_t from, int32_t to) {
-    if (!src || !src->image || !frame) return;
-    for (uint32_t i = 0; i < wolf_vm_picture_count(vm); i++) {
-        const wolf_picture *p = wolf_vm_picture_at(vm, i);
-        if (p->number < from || p->number > to) continue;
-        if (p->kind == WOLF_PIC_TEXT || !p->content || p->content[0] == '<') continue; /* not yet */
-        const wolf_image *im = src->image(src->ctx, p->content);
-        if (!im || !im->argb || !im->width || !im->height) continue;
-        source s;
-        memset(&s, 0, sizeof s);
-        s.img = im;
-        if (p->kind == WOLF_PIC_WINDOW) {
-            if (p->div_x <= 0 || p->div_y <= 0 || p->div_x > 16384 || p->div_y > 16384) continue;
-            s.window = 1;
-            s.sw = (uint32_t)p->div_x;
-            s.sh = (uint32_t)p->div_y;
-            s.cell_w = im->width / 3;
-            s.cell_h = im->height / 3;
-            if (s.sw < 2 * s.cell_w) s.cell_w = s.sw / 2; /* smaller than its corners: corners shrink [M] */
-            if (s.sh < 2 * s.cell_h) s.cell_h = s.sh / 2;
-        } else {
-            uint32_t dx = p->div_x > 0 ? (uint32_t)p->div_x : 1, dy = p->div_y > 0 ? (uint32_t)p->div_y : 1;
-            if (dx > im->width) dx = im->width;
-            if (dy > im->height) dy = im->height;
-            s.sw = im->width / dx;
-            s.sh = im->height / dy;
-            uint32_t piece = p->pattern > 0 ? (uint32_t)p->pattern - 1 : 0;
-            if (piece >= dx * dy) piece = 0; /* a piece the split does not have: the first [M] */
-            s.ox = piece % dx * s.sw;
-            s.oy = piece / dx * s.sh;
-        }
-        draw(p, &s, frame, width, height);
-    }
+    if (!frame) return;
+    canvas cv = {frame, width, height};
+    wolf_picture_quads(vm, src, from, to, draw_quad, &cv);
 }

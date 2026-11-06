@@ -198,6 +198,26 @@ void wolf_render_pictures(const wolf_vm *vm, const wolf_render_source *src, uint
                           uint32_t height, int32_t from, int32_t to);
 
 /*
+ * The same pictures as a list of textured quads, for any renderer (the plugin's GLES one; the
+ * software one above draws the same list). A file picture is one quad; a window is nine (its 3x3
+ * cells, corners kept, the rest stretched). docs/behaviour/drawing.md.
+ */
+typedef struct {
+    const char *file;           /* the image (relative to Data/) */
+    const wolf_image *image;    /* as src->image gave it; valid until the walk returns */
+    double x[4], y[4];          /* screen corners: the source's top left, top right, bottom right, bottom left */
+    double u0, v0, u1, v1;      /* the source rectangle in image pixels */
+    double opacity;             /* 0-1 */
+    double r, g, b;             /* colour multipliers (1 normal) */
+    int blend;                  /* WOLF_BLEND_* */
+    int32_t number;             /* the picture's number */
+} wolf_quad;
+typedef void (*wolf_quad_fn)(void *ctx, const wolf_quad *q);
+/* Calls fn for each quad of the pictures numbered from..to, lowest number first. */
+void wolf_picture_quads(const wolf_vm *vm, const wolf_render_source *src, int32_t from, int32_t to, wolf_quad_fn fn,
+                        void *ctx);
+
+/*
  * Sound (140). The core works out what to play; the plugin plays it. docs/behaviour/commands.md,
  * "Sound".
  */
