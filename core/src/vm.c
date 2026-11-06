@@ -47,6 +47,7 @@ static void init_table(void) {
     table[102] = wolf_h_choices;
     table[104] = wolf_h_stop_choices;
     table[105] = wolf_h_stop_message;
+    table[140] = wolf_h_sound;
     table[150] = wolf_h_picture;
     table[106] = h_debug_text;
     table[111] = wolf_h_if_number;

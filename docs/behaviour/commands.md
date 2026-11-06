@@ -48,6 +48,7 @@ it keeps, so a list does not depend on the buffer it came from.
 | 104 | Force a choice list shut (its forced branch); sets the force-stop-choices flag | manual 04ev_select |
 | 105 | Force a message shut; sets the force-stop-message flag | manual 04ev_text |
 | 150 | Pictures: show, move, erase, delay reset, over time, one or a range | manual 04ev_picture, [D], [R] |
+| 140 | Sound: play, stop, preload, free BGM, BGS and SE | manual 04ev_sound, [D], [R] |
 | 106 | Debug text: logged, never a blocking dialog | [V] local lane, risks.md |
 | 111 | Number condition and its branch | [R] |
 | 112 | String condition and its branch | [R] |
@@ -409,9 +410,38 @@ manual's 同値).
   rectangle and logged once; "link to scroll"; a move's own easing if the runtime has one
   (**Unknown**); saving pictures.
 
+## Sound: 140 (`core/src/sound.c`)
+
+The core works out what to play and hands a request to the plugin (`wolf_audio` in vm.h). What
+each part does is from the manual, help/04ev_sound.html [V]. The first number's layout is from
+mruby-wolf [R], checked on all 5,306 real commands [D]:
+
+- **First number**: bits 0-3 the process (0 play, 1 preload, 3 free what is not playing; the
+  manual's fourth, manual free, was removed in 2.20); bits 4-7 the kind (0 BGM, 1 BGS, 2 SE);
+  bits 8-23 a signed system-database entry (-1 is "(停止)", stop); bits 24-31 the source (0 a
+  system-database entry, 1 an entry named by a variable, 2 a file). A stop is stored
+  sign-extended over the source byte, so real stops read -256, -240 and -224 for BGM, BGS and
+  SE [D]. The core takes 0xFF with entry -1 as a stop.
+- **Then**: 1 the fade in frames (BGM/BGS; real values 10, 30, 60 [D]); 2 the start position
+  in milliseconds (BGM/BGS, the manual's 途中再生); 4 volume % and 5 frequency % (file source
+  only; real values include 100, 50 and 0 [D]). A frequency of 0, seen in real SE commands, is taken
+  as 100 [M]. **Unknown:** numbers 3, 6 and 7. The manual's other fields are pan (-255 to 255,
+  3.50 on), loop start, the MIDI key and the BGS channel, but which number holds which isn't
+  settled; they're not passed on yet.
+- **System-database entries** come from types 1 (BGM), 2 (BGS) and 3 (SE) [V, manual]. The
+  core takes the row's first text field as the file and its first two number fields as volume
+  and frequency [M: field order not checked against a real system database]. An entry the game
+  lacks is skipped, logged once. Where an entry named by a variable keeps its variable is
+  **Unknown**; the core reads number 3 [M]. No real command uses that source [D].
+- File names have their substitution codes replaced (`\cself[9]` is the common real form [D]).
+  An empty name stops [M].
+- Without audio set, requests are logged at debug level.
+- **Not built:** the SE delay and "stop also clears delayed SEs" from the manual, BGS
+  channels, pan, loop start, MIDI keys, and saving the playing BGM/BGS.
+
 ## Not built yet
 
-Sound (140), the database operations
+The database operations
 beyond read and write (251, 252, 255-257), 211 (reserved calls), 1000 (24 uses in one 3.x game
 [D], one number and a `.jpg` path under `Save/` or `Data/`: by the strings, saving the screen to a
 picture file; Unknown), starting map event pages by the hero (automatic and parallel pages run: maps.md), string

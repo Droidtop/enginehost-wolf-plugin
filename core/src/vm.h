@@ -177,6 +177,28 @@ void wolf_vm_pictures_tick(wolf_vm *vm);
 uint32_t wolf_vm_picture_count(const wolf_vm *vm);
 const wolf_picture *wolf_vm_picture_at(const wolf_vm *vm, uint32_t index);
 
+/*
+ * Sound (140). The core works out what to play; the plugin plays it. docs/behaviour/commands.md,
+ * "Sound".
+ */
+enum { WOLF_SOUND_BGM = 0, WOLF_SOUND_BGS = 1, WOLF_SOUND_SE = 2 };
+enum { WOLF_SOUND_PLAY = 0, WOLF_SOUND_STOP = 1, WOLF_SOUND_PRELOAD = 2, WOLF_SOUND_FREE_UNUSED = 3 };
+typedef struct {
+    int kind;            /* WOLF_SOUND_BGM, _BGS, _SE */
+    int action;          /* WOLF_SOUND_PLAY, _STOP, _PRELOAD, _FREE_UNUSED */
+    const char *file;    /* relative to Data/; "" for stop and free */
+    int32_t fade_frames; /* BGM/BGS: fade in on play, fade out on stop */
+    int32_t start_ms;    /* BGM/BGS: play from this far in */
+    int32_t volume;      /* % */
+    int32_t frequency;   /* % */
+} wolf_sound;
+typedef struct {
+    void *ctx;
+    void (*sound)(void *ctx, const wolf_sound *request);
+} wolf_audio;
+/* NULL: sound requests are logged only. Copied. */
+void wolf_vm_set_audio(wolf_vm *vm, const wolf_audio *audio);
+
 /* The flags 104 (force-stop choices) and 105 (force-stop message) set. */
 int wolf_vm_flag_stop_choices(const wolf_vm *vm);
 int wolf_vm_flag_stop_message(const wolf_vm *vm);
