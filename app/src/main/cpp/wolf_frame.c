@@ -10,6 +10,9 @@
 #include "wolf_decode.h"
 #include "wolf_files.h"
 #include "wolf_fonts.h"
+#include "wolf_map.h"
+#include "wolf_mapdraw.h"
+#include "wolf_maprun.h"
 #include "wolf_mixer.h"
 
 #define STBI_NO_STDIO
@@ -49,6 +52,15 @@ struct wolf_frame {
     sound *sounds;
     uint32_t nsounds;
     size_t sound_bytes;
+    /* the map */
+    wolf_tilesets tilesets;
+    wolf_map map;
+    int has_map;
+    wolf_maprun maprun;
+    int has_maprun;
+    uint32_t tile;
+    double cam_x, cam_y;
+    uint64_t frames;
 };
 
 static void cache_clear(wolf_frame *f) {
@@ -205,6 +217,48 @@ static const wolf_glyph *glyph(void *ctx, uint32_t font, uint32_t size, uint32_t
     return wolf_fonts_glyph(((wolf_frame *)ctx)->fonts, font, size, cp);
 }
 
+/* The tilesets and the start map (the system database's start position); a game without them
+ * runs on with no map, logged. */
+static void start_map(wolf_frame *f) {
+    uint8_t *data;
+    size_t len;
+    if (wolf_files_read(f->files, "BasicData/TileSetData.dat", &data, &len) == 0) {
+        int r = wolf_tilesets_load(data, len, &f->tilesets);
+        free(data);
+        if (r != WOLF_READ_OK) {
+            wolf_vm_log(f->vm, WOLF_LOG_WARN, "TileSetData.dat could not be loaded (%d); no map is drawn", r);
+            return;
+        }
+    }
+    int32_t map, x, y;
+    if (wolf_start_position(f->vm, &map, &x, &y) != 0) {
+        wolf_vm_log(f->vm, WOLF_LOG_WARN, "the game has no start position; no map");
+        return;
+    }
+    const char *file = wolf_map_file(f->vm, map);
+    if (!file || wolf_files_read(f->files, file, &data, &len) != 0) {
+        wolf_vm_log(f->vm, WOLF_LOG_WARN, "map %d (%s) could not be read; no map", (int)map, file ? file : "no file");
+        return;
+    }
+    int r = wolf_map_load(data, len, &f->map);
+    free(data);
+    if (r != WOLF_READ_OK) {
+        wolf_vm_log(f->vm, WOLF_LOG_WARN, "map %d (%s) could not be loaded (%d); no map", (int)map, file, r);
+        return;
+    }
+    f->has_map = 1;
+    /* the tile size: Game.dat's setting 0 (16, 32, 40 or 48) [R]; 32 when it is missing [M] */
+    const wolf_game *g = &f->g->game;
+    f->tile = g->nsettings && g->settings[0] ? g->settings[0] : 32;
+    wolf_map_camera(&f->map, f->tile, f->g->width, f->g->height, x, y, &f->cam_x, &f->cam_y);
+    if (wolf_maprun_init(&f->maprun, f->vm) == WOLF_MAPRUN_OK) {
+        f->has_maprun = 1;
+        wolf_maprun_enter(&f->maprun, &f->map);
+    }
+    wolf_vm_log(f->vm, WOLF_LOG_INFO, "start: map %d (%s), %ux%u tiles of %u px, %u events, at %d,%d", (int)map, file,
+                f->map.width, f->map.height, f->tile, f->map.nevents, (int)x, (int)y);
+}
+
 wolf_frame *wolf_frame_start(const char *folder, wolf_open_game *g, wolf_vm *vm, uint32_t audio_rate) {
     wolf_frame *f = calloc(1, sizeof *f);
     if (!f) return NULL;
@@ -230,21 +284,29 @@ wolf_frame *wolf_frame_start(const char *folder, wolf_open_game *g, wolf_vm *vm,
         wolf_audio audio = {f, on_sound};
         wolf_vm_set_audio(vm, &audio);
     }
+    start_map(f);
     return f;
 }
 
 #define BAND_LOW_END 99999 /* pictures up to here sit under the message window (manual) */
+#define BAND_UNDER_MAP (-300000) /* pictures down from here sit under the map's chips (manual) */
 
 void wolf_frame_run(wolf_frame *f, uint32_t keys) {
     wolf_fonts_frame(f->fonts); /* between frames: no glyph is in use */
     wolf_vm_input(f->vm, keys);  /* the window answers before the frame's events run */
     wolf_commonrun_step(&f->run);
+    if (f->has_maprun) wolf_maprun_step(&f->maprun); /* after the common events (the reference's order) */
+    f->frames++;
     wolf_vm_pictures_tick(f->vm);
 }
 
 void wolf_frame_quads(wolf_frame *f, wolf_quad_fn fn, void *ctx) {
     wolf_render_source src = {f, image, glyph};
-    wolf_picture_quads(f->vm, &src, INT32_MIN, BAND_LOW_END, fn, ctx);
+    wolf_picture_quads(f->vm, &src, INT32_MIN, BAND_UNDER_MAP, fn, ctx);
+    if (f->has_map)
+        wolf_map_quads(&f->map, &f->tilesets, f->tile, &src, f->cam_x, f->cam_y, f->g->width, f->g->height, f->frames,
+                       fn, ctx);
+    wolf_picture_quads(f->vm, &src, BAND_UNDER_MAP + 1, BAND_LOW_END, fn, ctx);
     wolf_window_quads(f->vm, &src, f->g->width, f->g->height, fn, ctx);
     wolf_picture_quads(f->vm, &src, BAND_LOW_END + 1, INT32_MAX, fn, ctx);
 }
@@ -253,7 +315,9 @@ void wolf_frame_draw(wolf_frame *f, uint32_t *pixels) {
     uint32_t w = f->g->width, h = f->g->height;
     for (size_t i = 0; i < (size_t)w * h; i++) pixels[i] = 0xFF000000u;
     wolf_render_source src = {f, image, glyph};
-    wolf_render_pictures(f->vm, &src, pixels, w, h, INT32_MIN, BAND_LOW_END);
+    wolf_render_pictures(f->vm, &src, pixels, w, h, INT32_MIN, BAND_UNDER_MAP);
+    if (f->has_map) wolf_render_map(&f->map, &f->tilesets, f->tile, &src, f->cam_x, f->cam_y, pixels, w, h, f->frames);
+    wolf_render_pictures(f->vm, &src, pixels, w, h, BAND_UNDER_MAP + 1, BAND_LOW_END);
     wolf_render_window(f->vm, &src, pixels, w, h);
     wolf_render_pictures(f->vm, &src, pixels, w, h, BAND_LOW_END + 1, INT32_MAX);
 }
@@ -273,6 +337,9 @@ void wolf_frame_stop(wolf_frame *f) {
     }
     free(f->sounds);
     pthread_mutex_destroy(&f->audio_lock);
+    if (f->has_maprun) wolf_maprun_free(&f->maprun);
+    if (f->has_map) wolf_map_free(&f->map);
+    wolf_tilesets_free(&f->tilesets);
     wolf_commonrun_free(&f->run);
     cache_clear(f);
     free(f->cache);
