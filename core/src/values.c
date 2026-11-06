@@ -3,6 +3,7 @@
  * help/06valueget.html (docs/behaviour/commands.md, "Call values").
  */
 #include "vm_internal.h"
+#include "wolf_data.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -36,14 +37,24 @@ typedef enum {
 
 typedef struct {
     kind k;
-    int32_t a; /* owner: map event, common event or spare block */
-    int32_t b; /* index */
+    int32_t a; /* owner: map event, common event or spare block; for K_DB the database */
+    int32_t b; /* index; for K_DB the type */
+    int32_t c, d; /* K_DB only: the data (row) and the field */
 } where;
 
 static where decode(const wolf_vm *vm, const wolf_thread *t, int32_t v) {
-    where w = {K_NONE, 0, 0};
+    where w = {K_NONE, 0, 0, 0, 0};
     if (v < 1000000) { w.k = K_LITERAL; return w; }
-    if (v >= 1000000000) { w.k = K_DB; return w; }
+    if (v >= 1000000000) {
+        /* 1x AA BBBB CC: database x (0 user, 1 changeable, 3 system), type A, data B, field C */
+        int32_t which = v / 100000000 - 10, r = v % 100000000;
+        if (which == 0) w.a = WOLF_DB_USER;
+        else if (which == 1) w.a = WOLF_DB_CHANGEABLE;
+        else if (which == 3) w.a = WOLF_DB_SYSTEM;
+        else w.a = -1; /* the 1,200,000,000s and 1,400,000,000 up name no database */
+        w.k = K_DB; w.b = r / 1000000; w.c = r / 100 % 10000; w.d = r % 100;
+        return w;
+    }
     if (v >= 15000000) {
         int32_t r = v - 15000000;
         w.k = K_CSELF; w.a = r / 100; w.b = r % 100;
@@ -123,8 +134,14 @@ static char **str_slot(wolf_vm *vm, where w) {
     }
 }
 
+static struct wolf_db *db_of(wolf_vm *vm, where w) {
+    return w.k == K_DB && w.a >= 0 ? vm->db[w.a] : NULL;
+}
+
 static void not_yet(wolf_vm *vm, where w, int32_t v) {
-    if (w.k == K_DB) wolf_once(vm, ONCE_DB, "database call values (%d) are not implemented yet; read as 0", (int)v);
+    if (w.k == K_DB)
+        wolf_once(vm, ONCE_DB, "database call value %d names no field of that kind; read as 0 or \"\", writes ignored",
+                  (int)v);
     else if (w.k == K_CHARA) wolf_once(vm, ONCE_CHARA, "character call values (%d) are not implemented yet; read as 0", (int)v);
     else if (w.k == K_REFUSED) wolf_once(vm, ONCE_RANGE_1500000, "call value %d is in the 1,500,000 block, which is never written", (int)v);
 }
@@ -135,6 +152,9 @@ int32_t wolf_get(wolf_vm *vm, const wolf_thread *t, int32_t ref) {
     if (w.k == K_RANDOM) return (int32_t)wolf_random(vm, (uint32_t)w.b);
     int32_t *p = slot(vm, w);
     if (p) return *p;
+    int32_t n;
+    struct wolf_db *db = db_of(vm, w);
+    if (db && wolf_db_number(db, (uint32_t)w.b, (uint32_t)w.c, (uint32_t)w.d, &n)) return n;
     not_yet(vm, w, ref);
     return 0;
 }
@@ -142,14 +162,18 @@ int32_t wolf_get(wolf_vm *vm, const wolf_thread *t, int32_t ref) {
 void wolf_set(wolf_vm *vm, const wolf_thread *t, int32_t ref, int32_t value) {
     where w = decode(vm, t, ref);
     int32_t *p = slot(vm, w);
+    struct wolf_db *db = db_of(vm, w);
     if (p) *p = value;
-    else not_yet(vm, w, ref);
+    else if (!db || !wolf_db_set_number(db, (uint32_t)w.b, (uint32_t)w.c, (uint32_t)w.d, value)) not_yet(vm, w, ref);
 }
 
 const char *wolf_get_str(wolf_vm *vm, const wolf_thread *t, int32_t ref) {
     where w = decode(vm, t, ref);
     char **p = str_slot(vm, w);
     if (p) return *p ? *p : "";
+    struct wolf_db *db = db_of(vm, w);
+    const char *s = db ? wolf_db_text(db, (uint32_t)w.b, (uint32_t)w.c, (uint32_t)w.d) : NULL;
+    if (s) return s;
     not_yet(vm, w, ref);
     return "";
 }
@@ -157,7 +181,11 @@ const char *wolf_get_str(wolf_vm *vm, const wolf_thread *t, int32_t ref) {
 void wolf_set_str(wolf_vm *vm, const wolf_thread *t, int32_t ref, const char *value) {
     where w = decode(vm, t, ref);
     char **p = str_slot(vm, w);
-    if (!p) { not_yet(vm, w, ref); return; }
+    if (!p) {
+        struct wolf_db *db = db_of(vm, w);
+        if (!db || !wolf_db_set_text(db, (uint32_t)w.b, (uint32_t)w.c, (uint32_t)w.d, value)) not_yet(vm, w, ref);
+        return;
+    }
     size_t n = strlen(value);
     char *copy = malloc(n + 1);
     if (!copy) return;

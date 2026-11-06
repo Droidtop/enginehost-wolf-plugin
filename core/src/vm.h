@@ -90,11 +90,17 @@ typedef struct {
 } wolf_config;
 
 typedef struct wolf_vm wolf_vm;
+struct wolf_db; /* wolf_data.h */
 typedef int (*wolf_handler)(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);
 
 wolf_vm *wolf_vm_create(const wolf_host *host, const wolf_config *config);
 /* The game's common events; the table and its lists must outlive the VM's use of them. */
 void wolf_vm_set_common_events(wolf_vm *vm, const wolf_common *events, uint32_t count);
+/* The game's databases: user (DataBase), changeable (CDataBase) and system (SysDataBase). Any may
+ * be NULL. Command 250 and the database call values read and write them in place, so they must
+ * outlive the VM's use of them; the VM never frees them. */
+void wolf_vm_set_databases(wolf_vm *vm, struct wolf_db *user, struct wolf_db *changeable,
+                           struct wolf_db *system);
 void wolf_vm_destroy(wolf_vm *vm);
 
 /* Starts a thread on a map event's page (map_event >= 0) or a common event (common >= 0). */

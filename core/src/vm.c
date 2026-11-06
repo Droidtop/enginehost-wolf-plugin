@@ -70,6 +70,7 @@ static void init_table(void) {
     table[210] = wolf_h_call;
     table[212] = wolf_h_label;
     table[213] = wolf_h_jump;
+    table[250] = wolf_h_database;
     table[300] = wolf_h_call_by_name;
     table[401] = wolf_h_case;
     table[402] = wolf_h_case;
@@ -129,6 +130,13 @@ void wolf_vm_set_common_events(wolf_vm *vm, const wolf_common *events, uint32_t 
     vm->cself = calloc((size_t)count * CSELF_COUNT + 1u, sizeof(int32_t));
     vm->cself_str = calloc((size_t)count * 5u + 1u, sizeof(char *));
     if (vm->cself && vm->cself_str) vm->ncommon = count;
+}
+
+void wolf_vm_set_databases(wolf_vm *vm, struct wolf_db *user, struct wolf_db *changeable,
+                           struct wolf_db *system) {
+    vm->db[WOLF_DB_USER] = user;
+    vm->db[WOLF_DB_CHANGEABLE] = changeable;
+    vm->db[WOLF_DB_SYSTEM] = system;
 }
 
 void wolf_vm_destroy(wolf_vm *vm) {

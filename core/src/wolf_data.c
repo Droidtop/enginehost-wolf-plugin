@@ -326,6 +326,53 @@ const char *wolf_db_text(const wolf_db *db, uint32_t type, uint32_t row, uint32_
     return r->texts[f->slot];
 }
 
+int wolf_db_set_number(wolf_db *db, uint32_t type, uint32_t row, uint32_t field, int32_t value) {
+    const wolf_db_row *r;
+    const wolf_db_field *f = db_field(db, type, row, field, &r);
+    if (!f || f->is_text || !r->numbers) return 0;
+    r->numbers[f->slot] = value;
+    return 1;
+}
+
+int wolf_db_set_text(wolf_db *db, uint32_t type, uint32_t row, uint32_t field, const char *value) {
+    const wolf_db_row *r;
+    const wolf_db_field *f = db_field(db, type, row, field, &r);
+    if (!f || !f->is_text || !r->texts) return 0;
+    size_t n = strlen(value);
+    char *copy = malloc(n + 1);
+    if (!copy) return 0;
+    memcpy(copy, value, n + 1);
+    free(r->texts[f->slot]);
+    r->texts[f->slot] = copy;
+    return 1;
+}
+
+static int same(const char *a, const char *b) {
+    return a && b && strcmp(a, b) == 0;
+}
+
+int32_t wolf_db_type_by_name(const wolf_db *db, const char *name) {
+    for (uint32_t i = 0; i < db->ntypes && i < INT32_MAX; i++)
+        if (same(db->types[i].name, name)) return (int32_t)i;
+    return -1;
+}
+
+int32_t wolf_db_row_by_name(const wolf_db *db, uint32_t type, const char *name) {
+    if (type >= db->ntypes) return -1;
+    const wolf_db_type *t = &db->types[type];
+    for (uint32_t i = 0; i < t->nrows && i < INT32_MAX; i++)
+        if (same(t->rows[i].name, name)) return (int32_t)i;
+    return -1;
+}
+
+int32_t wolf_db_field_by_name(const wolf_db *db, uint32_t type, const char *name) {
+    if (type >= db->ntypes) return -1;
+    const wolf_db_type *t = &db->types[type];
+    for (uint32_t i = 0; i < t->nfields && i < INT32_MAX; i++)
+        if (same(t->fields[i].name, name)) return (int32_t)i;
+    return -1;
+}
+
 /* ---- Game.dat ---------------------------------------------------------------------------- */
 
 static const uint8_t GAME_MAGIC[8] = {0x57, 0x00, 0x00, 0x4F, 0x4C, 0x00, 0x46, 0x4D};

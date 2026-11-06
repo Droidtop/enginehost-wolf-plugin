@@ -68,7 +68,7 @@ typedef struct {
     wolf_db_row *rows;
 } wolf_db_type;
 
-typedef struct {
+typedef struct wolf_db {
     int utf8;
     uint32_t version;
     uint32_t ntypes;
@@ -81,6 +81,14 @@ void wolf_db_free(wolf_db *db);
 /* A value, or 0 / NULL when the type, row or field does not exist or holds the other kind. */
 int wolf_db_number(const wolf_db *db, uint32_t type, uint32_t row, uint32_t field, int32_t *out);
 const char *wolf_db_text(const wolf_db *db, uint32_t type, uint32_t row, uint32_t field);
+/* Writes, for command 250 and database call values: 1 when the field exists and holds that kind.
+ * The text is copied. */
+int wolf_db_set_number(wolf_db *db, uint32_t type, uint32_t row, uint32_t field, int32_t value);
+int wolf_db_set_text(wolf_db *db, uint32_t type, uint32_t row, uint32_t field, const char *value);
+/* Indexes by name, for 250's name boxes: the first match, or -1. */
+int32_t wolf_db_type_by_name(const wolf_db *db, const char *name);
+int32_t wolf_db_row_by_name(const wolf_db *db, uint32_t type, const char *name);
+int32_t wolf_db_field_by_name(const wolf_db *db, uint32_t type, const char *name);
 
 /* ---- Game.dat ---------------------------------------------------------------------------- */
 

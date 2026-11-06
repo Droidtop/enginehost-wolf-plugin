@@ -13,7 +13,8 @@
 /* Things logged once each, so a game that hits them every frame does not flood the log. */
 enum {
     ONCE_DB, ONCE_CHARA, ONCE_RANGE_1500000, ONCE_MAP_EVENT_CALL, ONCE_NAME_ESCAPE,
-    ONCE_STRING_OP, ONCE_BAD_ARGS, ONCE_LABEL, ONCE_COUNT
+    ONCE_STRING_OP, ONCE_BAD_ARGS, ONCE_LABEL, ONCE_DB_MISSING, ONCE_DB_KIND, ONCE_DB_OP,
+    ONCE_DB_NAME, ONCE_COUNT
 };
 
 struct wolf_vm {
@@ -38,7 +39,17 @@ struct wolf_vm {
     char **cself_str;   /* ncommon x 5 (self variables 5-9) */
 
     uint32_t rng;
+
+    struct wolf_db *db[3]; /* WOLF_DB_USER, WOLF_DB_CHANGEABLE, WOLF_DB_SYSTEM; not owned */
 };
+
+/* The three databases, in the order of their call values (06valueget): 10 user, 11 changeable,
+ * 13 system. */
+enum { WOLF_DB_USER = 0, WOLF_DB_CHANGEABLE = 1, WOLF_DB_SYSTEM = 2 };
+
+/* 121's assignments, shared with 250 (calc.c): the result of "left how= right", or 0 when how is
+ * not an assignment this build knows. */
+int wolf_assign(int how, int64_t left, int64_t right, int64_t *out);
 
 void wolf_once(wolf_vm *vm, int which, const char *fmt, ...);
 uint32_t wolf_random(wolf_vm *vm, uint32_t bound); /* 0..bound inclusive */
@@ -72,6 +83,7 @@ int wolf_h_label(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);          /* 21
 int wolf_h_jump(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);           /* 213 */
 int wolf_h_call(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);           /* 210 */
 int wolf_h_call_by_name(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);   /* 300 */
+int wolf_h_database(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);       /* 250 */
 
 /* Called by the loop when a list ends, to hand back a common event's result. */
 void wolf_return(wolf_vm *vm, wolf_thread *t);

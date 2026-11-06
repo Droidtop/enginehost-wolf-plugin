@@ -1,7 +1,10 @@
 # Event commands: the interpreter
 
 Sources are marked as in the other notes: [V] read in a public source or traced by the local lane,
-[M] our own reading, to be checked by the comparison runs. [R] is behaviour learned by reading
+[M] our own reading, to be checked by the comparison runs. [D] is a pattern counted in the owner's
+games' own data files, read in place (the survey games of #858: Asuka Virgin Idol Debut 3.135,
+Living With Sister 3.191, The Clumsy Witch Seris 3.714); it shows how real commands are laid
+out, not what the runtime does with them. [R] is behaviour learned by reading
 take-cheeze/rpg-maker-clone's `mruby-wolf` (MIT) at commit 75b1c34, as the owner allowed on
 #858 ("we can learn from it"): read only, never built, run, copied or vendored. What is written
 here is the behaviour in our own words; the code is our own. **Unknown** marks what no source
@@ -53,6 +56,7 @@ it keeps, so a list does not depend on the buffer it came from.
 | 210, 300 | Call a common event by number or by name | [R] |
 | 212, 213 | Label, jump to label | [R] |
 | 401, 402, 420, 421, 499 | Case markers, else, cancel, branch end | [R] |
+| 250 | Database: read a field into a variable, or write one | manual 04ev_db, [D], [R] |
 
 ## Call values (`core/src/values.c`)
 
@@ -72,7 +76,18 @@ help/06valueget.html [V]:
 | 8,000,000 + N | a random number 0 to N, freshly drawn [V] |
 | 9,000,000 + X / 9,900,000 + X | system variable / system string X [V] |
 | 15,000,000 + 100·C + X | common event C's self variable X [V] |
-| 9,100,000s, 1,000,000,000 + | characters, databases: **not built yet**, read as 0, logged once |
+| 1,000,000,000 + 1,000,000·A + 100·B + C | user database (DataBase), type A, data B, field C [V] |
+| 1,100,000,000 + ... | changeable database (CDataBase), same layout [V] |
+| 1,300,000,000 + ... | system database (SysDataBase), same layout [V] |
+| 1,200,000,000s, 1,400,000,000 up | name no database [V, by omission]; read as 0, logged once |
+| 9,100,000s | characters: **not built yet**, read as 0, logged once |
+
+Database call values read and write the field in place: a number field through the number
+calls, a text field through the string calls. A field of the other kind, or a type, data or field
+the database does not have, reads 0 or "" and ignores writes, logged once [M]. Writes to the user
+and system databases are allowed and last until the game ends [M: the manual only calls these
+"read or write"; **Unknown** whether the runtime refuses them]. Only the changeable database is
+expected to go into saves (the save format is not built yet).
 
 Reads of anything outside the game's configured variables give 0 or "", and such writes are
 ignored [M].
@@ -155,9 +170,66 @@ case, optionally an else marker, and a branch end; each case's commands sit one 
   caller's context [R]. A call to a common event that does not exist is ignored and logged once.
 - Calls nest at most 256 deep (above); past that the thread stops.
 
+## Database: 250 (`core/src/db.c`)
+
+What it does is from the manual, help/04ev_db.html [V]. The argument layout was read from
+take-cheeze's mruby-wolf [R] and checked against all 17,291 commands 250 in the survey games [D]:
+
+- Five numbers in nearly all real commands (17,033 [D]): the type, the data and the field
+  (each a call value), a packed word, and the value or target (a call value). 258 commands have
+  four numbers and write the command's first string, a literal text [D].
+- The packed word: the low byte holds the assignment in its high four bits, numbered as
+  121's (0 =, 1 +=, 2 -=, 3 ×=, 4 ÷=, 5 %=, 6 raise to, 7 lower to; 0 to 7 are seen [D]) and,
+  in bit 1, "the value is the literal text" (set on exactly the four-number commands [D]).
+  The next byte holds the database in its low four bits (0 changeable, 1 system, 2 user) and the
+  operation in its high four (0 write, 1 read). These four combinations are the only ones in
+  the data [D]. The third byte's bits 0-2 say the type, data and field are named by the
+  command's strings 2, 3 and 4 (the manual's 名前 boxes).
+- **Read** combines the field with the target ("target how= field") and stores the result in the
+  target. **Write** combines the field with the value ("field how= value") and stores the result
+  in the field [R].
+- **Text fields** take = and += (joined); any other assignment is taken as = and logged once
+  [M: the reference sees only = and += on texts, and the manual names no others].
+- **Number results** are held to ±2,000,000,000, as 121 outside the common-event wrap [M].
+- **Past the end** [V, manual]: a field number of 100 or more moves on to the next data, and a
+  data number of 10,000 or more moves on to the next type. 250 is one of the two commands the
+  manual allows this for.
+- **Name boxes**: when a name bit is set and its string is not empty, the core looks the name up
+  in that database (type by name, then data and field within that type), and the name decides
+  the number. A name the database does not have leaves the stored number, logged once [M]. In
+  the reference's sample game the stored numbers always matched the names [R]. The manual says
+  data names are matched against the current name from 3.566 on, and the core matches each
+  row's name as loaded. **Unknown:** how a type whose data names come from its first text field
+  (the 最初の文字列 setting) is stored. Until that is known, such types match the stored row
+  names.
+- **Refused, logged once, and skipped** (the list carries on): a database other than 0-2, an
+  operation other than read and write, a negative or missing type, data or field, a literal
+  text written into a number field, a database the game did not load, and too few numbers.
+- **Unknown:** what bit 0 of the low byte means (ignored, logged once; it is 0 in every real
+  command [D] [R]).
+
+**Not built in 250**: the manual's other database operations (counting data and fields,
+names to numbers and back, initialising a type or a data, inserting, removing, copying and
+sorting data, XY arrays, CSV in and out). The survey games carry none of these in 250 [D].
+They appear under separate codes instead, laid out as below [D], and stay unhandled until
+their meaning is settled from the manual and a comparison run:
+
+| Code | Real shape [D] | Likely, from the manual's feature list and the strings | Uses |
+|---|---|---|---|
+| 251 | five numbers (type, 0, 0, word, number) and four strings, the first a `.csv` path | CSV in/out (04ev_db item 5) | 23 |
+| 252 | five numbers, word bytes 0x12/0x13 | data insert/remove/copy (item 4) | 4 |
+| 255 | five numbers, word 0x10300/0x11300, a type name | data sort or counts | 50 |
+| 256, 257 | one each | Unknown | 2 |
+
+The CSV paths are game-relative and use `\cself[]`/`\sys[]` escapes. The manual refuses
+`//`, `\\`, `..`, `./`, `.\`, `%`, `:`, `*`, `?`, `"`, `<`, `>` and `|` in them (Ver 3.00 on),
+and the core will apply that rule to every file name a command gives (risks.md).
+
 ## Not built yet
 
-Messages and choices (101, 102), pictures (150), sound (140), databases (250), 211 (reserved
-calls), starting map event pages by the hero (automatic and parallel pages run: maps.md), string
+Messages and choices (101, 102), pictures (150), sound (140), the database operations
+beyond read and write (251, 252, 255-257), 211 (reserved calls), 1000 (24 uses in one 3.x game
+[D], one number and a `.jpg` path under `Save/` or `Data/`: by the strings, saving the screen to a
+picture file; Unknown), starting map event pages by the hero (automatic and parallel pages run: maps.md), string
 arguments, and everything that draws or reads input. A command
 with no handler is logged once and skipped (above).

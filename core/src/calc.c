@@ -68,6 +68,13 @@ static int64_t trunc64(double d) {
 }
 
 /* The assignment, from the left value and the joined right value (atan takes both halves). */
+static int assign_int(int how, int64_t left, int64_t right, int32_t x, int32_t y, int64_t *out);
+
+int wolf_assign(int how, int64_t left, int64_t right, int64_t *out) {
+    if (how == A_ATAN) return 0; /* needs both halves of 121's right side */
+    return assign_int(how, left, right, 0, 0, out);
+}
+
 static int assign_int(int how, int64_t left, int64_t right, int32_t x, int32_t y, int64_t *out) {
     switch (how) {
     case A_SET: *out = right; return 1;
