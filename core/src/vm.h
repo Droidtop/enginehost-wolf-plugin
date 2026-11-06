@@ -178,6 +178,26 @@ uint32_t wolf_vm_picture_count(const wolf_vm *vm);
 const wolf_picture *wolf_vm_picture_at(const wolf_vm *vm, uint32_t index);
 
 /*
+ * Drawing pictures in software (render.c). The core draws into the frame the plugin hands over;
+ * the plugin decodes images. docs/behaviour/drawing.md.
+ */
+typedef struct {
+    uint32_t width, height;
+    const uint32_t *argb; /* width * height pixels, 0xAARRGGBB, not premultiplied */
+} wolf_image;
+typedef struct {
+    void *ctx;
+    /* The image for a file named relative to Data/, or NULL when there is none. It must stay
+     * valid until wolf_render_pictures returns. */
+    const wolf_image *(*image)(void *ctx, const char *file);
+} wolf_render_source;
+/* Draws the pictures numbered from..to (inclusive), lowest first, onto frame (width * height
+ * opaque 0xFFRRGGBB pixels). File and window pictures are drawn; text pictures and the special
+ * names (<SCREENSHOT>, <SQUARE>, ...) are not yet. */
+void wolf_render_pictures(const wolf_vm *vm, const wolf_render_source *src, uint32_t *frame, uint32_t width,
+                          uint32_t height, int32_t from, int32_t to);
+
+/*
  * Sound (140). The core works out what to play; the plugin plays it. docs/behaviour/commands.md,
  * "Sound".
  */
