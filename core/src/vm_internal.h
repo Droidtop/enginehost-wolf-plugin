@@ -15,7 +15,7 @@ enum {
     ONCE_DB, ONCE_CHARA, ONCE_RANGE_1500000, ONCE_MAP_EVENT_CALL, ONCE_NAME_ESCAPE,
     ONCE_STRING_OP, ONCE_BAD_ARGS, ONCE_LABEL, ONCE_DB_MISSING, ONCE_DB_KIND, ONCE_DB_OP,
     ONCE_DB_NAME, ONCE_TEXT_XY, ONCE_TEXT_LONG, ONCE_STR_SOURCE, ONCE_STR_FILE, ONCE_STR_EXT,
-    ONCE_UI_HEADLESS, ONCE_UI_EXTRA, ONCE_COUNT
+    ONCE_UI_HEADLESS, ONCE_UI_EXTRA, ONCE_PIC_TRANSFORM, ONCE_PIC_LIMIT, ONCE_PIC_OP, ONCE_COUNT
 };
 
 struct wolf_vm {
@@ -51,9 +51,13 @@ struct wolf_vm {
     const wolf_cmd *ui_cmd;
     int ui_answered;
     int32_t ui_result;           /* the choice, -1 cancelled, -2 force-stopped */
+
+    struct wolf_pictures *pics;  /* picture.c; NULL until the first 150 */
 };
 
 enum { UI_NONE, UI_MESSAGE, UI_CHOICES };
+
+struct wolf_pictures; /* picture.c */
 
 /* The three databases, in the order of their call values (06valueget): 10 user, 11 changeable,
  * 13 system. */
@@ -101,6 +105,8 @@ int wolf_h_message(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);        /* 10
 int wolf_h_choices(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);        /* 102 */
 int wolf_h_stop_choices(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);   /* 104 */
 int wolf_h_stop_message(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);   /* 105 */
+int wolf_h_picture(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);        /* 150 */
+void wolf_pictures_free(wolf_vm *vm);
 
 /* After a construct's opener c (flow.c): on to just past the nth (0-based) marker with this code
  * at c's indent, or past the branch end when there is none. 1 when the marker was found. */

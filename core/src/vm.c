@@ -47,6 +47,7 @@ static void init_table(void) {
     table[102] = wolf_h_choices;
     table[104] = wolf_h_stop_choices;
     table[105] = wolf_h_stop_message;
+    table[150] = wolf_h_picture;
     table[106] = h_debug_text;
     table[111] = wolf_h_if_number;
     table[112] = wolf_h_if_string;
@@ -140,6 +141,7 @@ void wolf_vm_destroy(wolf_vm *vm) {
     free(vm->map_self);
     free(vm->cself);
     free_strings(vm->cself_str, (size_t)vm->ncommon * 5u);
+    wolf_pictures_free(vm);
     free(vm);
 }
 

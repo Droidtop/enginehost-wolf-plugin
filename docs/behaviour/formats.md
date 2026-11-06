@@ -108,7 +108,9 @@ counts: a project with more field or row names than the `.dat` holds keeps only 
 - indicator 0; magic `57 00 00 4F 4C 00 46 4D`; version byte, 0x55 for UTF-8;
 - byte list: settings (0 tile size, 1 and 2 character directions, 4 frames per second,
   5 shadows, 7 animation patterns, 8 movement width, ... Unknown beyond these);
-- text list: 0 the game's title, 1 always "0000-0000", 3 the font, 4-6 sub-fonts,
+- text list: 0 the game's title, 1 always "0000-0000", 2 a key string (UberWolf labels it
+  "decrypt key"; in all three survey games with unpacked data it is present, 18-30 bytes [D];
+  its value is never logged or stored), 3 the font, 4-6 sub-fonts,
   7 the hero's graphic, 8 the subtitle; others Unknown;
 - s32 file size; s32 Unknown; u32 n then n u16 settings (16 screen width, 17 height,
   18 the editor version; 0 width or height means 320 x 240);

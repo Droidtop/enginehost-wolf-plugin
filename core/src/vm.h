@@ -146,6 +146,37 @@ void wolf_vm_choice_made(wolf_vm *vm, int32_t index);
 /* 1 while a message or choice list is up and unanswered. */
 int wolf_vm_ui_busy(const wolf_vm *vm);
 
+/*
+ * Pictures (150). The core keeps every picture's state and moves it frame by frame; the plugin
+ * draws the list each frame, lowest number first. docs/behaviour/commands.md, "Pictures".
+ */
+enum { WOLF_PIC_FILE = 0, WOLF_PIC_TEXT = 1, WOLF_PIC_WINDOW = 2 };
+enum { WOLF_BLEND_NORMAL = 0, WOLF_BLEND_ADD = 1, WOLF_BLEND_SUBTRACT = 2, WOLF_BLEND_MULTIPLY = 3 };
+/* anchors as the editor numbers them */
+enum { WOLF_ANCHOR_TOP_LEFT = 0, WOLF_ANCHOR_CENTER = 1, WOLF_ANCHOR_BOTTOM_LEFT = 2, WOLF_ANCHOR_TOP_RIGHT = 3,
+       WOLF_ANCHOR_BOTTOM_RIGHT = 4, WOLF_ANCHOR_TOP_CENTER = 5, WOLF_ANCHOR_BOTTOM_CENTER = 6 };
+
+typedef struct {
+    int32_t number;     /* higher draws above */
+    int kind;           /* WOLF_PIC_* */
+    const char *content;/* the file (relative to Data/), the text (codes replaced), or the window's base file */
+    int32_t div_x, div_y, pattern; /* a file's split and the piece shown; a window's width and height in div_x, div_y */
+    int anchor, blend;
+    double x, y;        /* pixels */
+    double opacity;     /* 0-255 */
+    double zoom_x, zoom_y; /* percent; negative flips */
+    double angle;       /* tenths of a degree */
+    double r, g, b;     /* percent, 100 normal */
+} wolf_picture;
+
+/* Advances moves, fades and delayed picture commands by one frame. Call once per frame, after
+ * the frame's threads have run. */
+void wolf_vm_pictures_tick(wolf_vm *vm);
+/* The pictures shown now, lowest number first. Pointers stay valid until the next command or
+ * tick. */
+uint32_t wolf_vm_picture_count(const wolf_vm *vm);
+const wolf_picture *wolf_vm_picture_at(const wolf_vm *vm, uint32_t index);
+
 /* The flags 104 (force-stop choices) and 105 (force-stop message) set. */
 int wolf_vm_flag_stop_choices(const wolf_vm *vm);
 int wolf_vm_flag_stop_message(const wolf_vm *vm);

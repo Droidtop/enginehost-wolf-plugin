@@ -47,6 +47,7 @@ it keeps, so a list does not depend on the buffer it came from.
 | 102 | Choices, and their branches | manual 04ev_select, [D], [R] |
 | 104 | Force a choice list shut (its forced branch); sets the force-stop-choices flag | manual 04ev_select |
 | 105 | Force a message shut; sets the force-stop-message flag | manual 04ev_text |
+| 150 | Pictures: show, move, erase, delay reset, over time, one or a range | manual 04ev_picture, [D], [R] |
 | 106 | Debug text: logged, never a blocking dialog | [V] local lane, risks.md |
 | 111 | Number condition and its branch | [R] |
 | 112 | String condition and its branch | [R] |
@@ -355,9 +356,62 @@ The plugin draws the window; the core says what to show and waits for the answer
 - **Unknown:** how the runtime lays out and pages text, and the key timing. That belongs to
   the drawing, built next, and to comparison runs.
 
+## Pictures: 150 (`core/src/picture.c`)
+
+The core keeps each picture's state and moves it frame by frame. The plugin calls
+`wolf_vm_pictures_tick` once a frame and draws `wolf_vm_picture_at(0..count-1)`, lowest number
+first. What each part does is from the manual, help/04ev_picture.html [V]. The layout of the
+first eleven numbers is from mruby-wolf [R]; the rest comes from all 29,452 real commands in the
+survey games [D]. Real commands have 2, 3, 4, 6, 11-15, 18, 19 or 25 numbers, and a shorter
+one simply stops early [D].
+
+**The options word** (first number): bits 0-3 the operation (0 show, 1 move, 2 erase, 3 delay
+reset); 4-6 what is shown (0 a file, 1 a file named by a string variable, 2 a text, 3 a window
+built from a base image, 4 the same named by a variable); 8-11 the blend (0 normal, 1 add, 2
+subtract, 3 multiply, 15 keep; others are taken as normal); 12-15 the anchor (0 top left, 1
+centre, 2 bottom left, 3 top right, 4 bottom right, 5 top centre, 6 bottom centre; all seven
+occur [D], and the manual lists seven); 16-19 = 1 relative place [D, below]; 20-23 the zoom
+mode (0 one value, 3 width and height apart, 4 keep); 24 a range; 26 free transform.
+
+**Show and move**, by position: 1 the picture number; 2 the process time in frames; 3, 4 the
+split (a window's width and height); 5 the piece shown; 6 opacity (0-255); 7, 8 X and Y; 9
+zoom % (the width when apart); 10 angle in tenths of a degree; 11 the string variable naming
+the file (types 1 and 4); 12 a colour word, 0x2000000 when 15-17 apply and 0x1000000 when the
+colour is kept [D: shows carry the first, moves the second]; 13 the delay in frames before the
+command acts; 14 the range's last number; 15-17 colour R, G, B in % (100 normal); 18 the zoom
+height when apart. Any number may be a call value. -1,000,000 means "the same as now" (the
+manual's 同値).
+
+- **Relative**, bits 16-19 = 1 [D]: X and Y add to where the picture is. Of the moves with this
+  bit, 5,022 positions are 0 and 997 are small offsets (60 or less). Moves without it mostly
+  carry variables and screen positions. That fits the manual's 相対モード and nothing else.
+- **Erase**: 2 the process time, 3 the delay, 5 the range's last number (in the six-number
+  form). **Delay reset**: 2 the range's last number.
+- **Over time** [V: the manual's 処理時間]: values move in a straight line from where they are
+  to the new ones over the process time, one step a frame [M: straight-line steps]. A new
+  picture shown with a process time fades in from nothing at its new place [M]. An erase with a
+  process time fades out, then goes [M]. Showing a picture again replaces its image and moves
+  from where it is (the manual: show on a shown number "acts as move").
+- **Delay** [V: 発動ディレイ]: the command acts after that many frames, with the values worked
+  out when it ran [M]. A delay reset drops the waiting ones for its numbers. The manual says
+  delayed commands are not saved.
+- **Text pictures and file names** have their substitution codes replaced (file names from
+  3.345 on [V]); display codes stay for the drawing. The special file names `<SCREENSHOT>`,
+  `<MAP_SCREENSHOT>`, `<CUT/...>`, `<SQUARE>`, `<GRADX-...>` and `<LINE...>` (window type) are
+  passed to the plugin as written; drawing them is the plugin's job.
+- **Draw order** [V]: higher numbers above. The manual places the map, characters, fog and the
+  message window between number bands (-400,000 / -300,000 / ... / 100,000), differently under
+  "picture behaviour Ver1" and "Ver2". The plugin draws by those bands; which Ver a game uses is
+  a Game.dat setting, **Unknown** where.
+- Caps (ours): 65,536 pictures shown and 65,536 delayed commands; a range touches at most
+  10,000 pictures; times and delays at most 1,000,000 frames.
+- **Not built:** free transform (the 25-number form, 19 real commands [D]), drawn as a plain
+  rectangle and logged once; "link to scroll"; a move's own easing if the runtime has one
+  (**Unknown**); saving pictures.
+
 ## Not built yet
 
-Pictures (150), sound (140), the database operations
+Sound (140), the database operations
 beyond read and write (251, 252, 255-257), 211 (reserved calls), 1000 (24 uses in one 3.x game
 [D], one number and a `.jpg` path under `Save/` or `Data/`: by the strings, saving the screen to a
 picture file; Unknown), starting map event pages by the hero (automatic and parallel pages run: maps.md), string
