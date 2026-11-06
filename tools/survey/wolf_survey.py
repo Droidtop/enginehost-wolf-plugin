@@ -4,14 +4,20 @@
 Usage:
     python3 -I wolf_survey.py GAMES_DIR [--out report.json] [--max-depth N]
 
-GAMES_DIR is searched for game folders: a folder holding Game.exe or GamePro.exe next to a
-Data/ folder or .wolf archives. Nothing is written except the report, nothing is copied, and
-nothing is decrypted or unpacked. For each game the report gives:
+GAMES_DIR is searched for game folders: a folder holding Wolf project data, that is a
+Data/BasicData folder with Game.dat in it, a Data.wolf, or a Data/BasicData.wolf. The runtime may be
+renamed (WitchLegacy.exe), so the executable's name is not what makes a game, and a folder with
+Game.exe and an RPG Maker Data/ folder is not one. Nothing is written except the report, nothing
+is copied, and nothing is decrypted. LZ4-packed project files (3.5+) are unpacked in memory to be
+counted. For each game the report gives:
 
-- the engine version, from the version resource of Game.exe / GamePro.exe;
+- the engine version, from the version resource of the runtime (Game.exe or GamePro.exe, else
+  every executable beside the data but Config.exe); only that resource is read;
 - packed or unpacked data, each archive's size and its first 16 bytes. Each engine era uses one
   fixed archive key, so archives of one era share their first bytes; the report groups them;
-- Pro (GamePro.exe, or a key archive) and other signs that the core must refuse the game;
+- what the protection rule sees, counted apart because a game on the Pro runtime can ship
+  plain data: "pro-runtime" (the game ships GamePro.exe) and "protected-data" (a BasicData .dat
+  whose byte 1 is 0x50, Pro's protected form, formats.md);
 - for data stored unpacked: the text encoding marker of BasicData, the screen and tile size where
   Game.dat says so, and how many times each event command code appears in CommonEvent.dat and
   MapData/*.mps.
@@ -39,9 +45,11 @@ MAX_STRING = 1 << 20
 MAX_LIST = 200000
 MAX_ROUTE = 100000
 READ_LIMIT = 64 << 20  # never read more than this from one file
+UNPACK_LIMIT = 256 << 20  # the core's cap on an unpacked body
 
 PRO_MARKERS = ("GamePro.exe",)
 EXE_NAMES = ("Game.exe", "GamePro.exe")
+NOT_RUNTIME = ("config.exe",)
 
 
 # ---------------------------------------------------------------- PE version resource
@@ -103,7 +111,7 @@ class _Bad(Exception):
     pass
 
 
-def _cmd(buf, o, end):
+def _cmd(buf, o, end, extras=False):
     """Parse one command at o; return (code, next offset) or raise _Bad."""
     if o + 5 > end:
         raise _Bad
@@ -151,10 +159,14 @@ def _cmd(buf, o, end):
             o += 2
     elif tail != 0:
         raise _Bad
+    if extras:  # 3.5+ packed files: a byte count and that many bytes (formats.md)
+        if o >= end or o + 1 + buf[o] > end:
+            raise _Bad
+        o += 1 + buf[o]
     return code, o
 
 
-def _list_at(buf, o, end, strict=True):
+def _list_at(buf, o, end, strict=True, extras=False):
     """A command list at o (u32 count + commands): return (codes, next offset) or raise _Bad."""
     if o + 4 > end:
         raise _Bad
@@ -164,7 +176,7 @@ def _list_at(buf, o, end, strict=True):
     o += 4
     codes = []
     for _ in range(n):
-        code, o = _cmd(buf, o, end)
+        code, o = _cmd(buf, o, end, extras)
         codes.append(code)
     # Strict: a list ends with the blank command (0) and holds one command besides it. That is
     # how the editor writes event pages as far as we know [unverified], and it cuts false
@@ -174,14 +186,17 @@ def _list_at(buf, o, end, strict=True):
     return codes, o
 
 
-def count_commands(buf, strict=True):
-    """Counter of event command codes in buf, and the number of lists found."""
+def count_commands(buf, strict=True, extras=False):
+    """Counter of event command codes in buf, and the number of lists found.
+
+    extras: every command carries the 3.5+ trailing byte list, as in LZ4-packed files.
+    """
     counts = collections.Counter()
     lists = 0
     o, end = 0, len(buf)
     while o + 4 <= end:
         try:
-            codes, nxt = _list_at(buf, o, end, strict)
+            codes, nxt = _list_at(buf, o, end, strict, extras)
         except _Bad:
             o += 1
             continue
@@ -191,12 +206,88 @@ def count_commands(buf, strict=True):
     return counts, lists
 
 
+# ---------------------------------------------------------------- LZ4 (3.5+ packed files)
+
+def _lz4_len(src, i, n, value):
+    """Extend a 4-bit length with the 255-run bytes that follow it."""
+    while True:
+        if i >= n:
+            raise _Bad
+        b = src[i]
+        i += 1
+        value += b
+        if b != 255:
+            return value, i
+
+
+def lz4_block(src, size):
+    """Decode one raw LZ4 block (no frame) that must produce exactly size bytes, or raise _Bad."""
+    if size > UNPACK_LIMIT:
+        raise _Bad
+    out = bytearray()
+    i, n = 0, len(src)
+    while i < n:
+        token = src[i]
+        i += 1
+        lit = token >> 4
+        if lit == 15:
+            lit, i = _lz4_len(src, i, n, lit)
+        if i + lit > n or len(out) + lit > size:
+            raise _Bad
+        out += src[i:i + lit]
+        i += lit
+        if i == n:
+            break  # the last sequence is literals only
+        if i + 2 > n:
+            raise _Bad
+        off = src[i] | (src[i + 1] << 8)
+        i += 2
+        if off == 0 or off > len(out):
+            raise _Bad
+        m = token & 15
+        if m == 15:
+            m, i = _lz4_len(src, i, n, m)
+        m += 4
+        if len(out) + m > size:
+            raise _Bad
+        start = len(out) - off
+        if off >= m:
+            out += out[start:start + m]
+        else:
+            for k in range(m):  # an overlapping match repeats what it is writing
+                out.append(out[start + k])
+    if len(out) != size:
+        raise _Bad
+    return bytes(out)
+
+
+def unpack(buf):
+    """The unpacked body of a 3.5+ packed project file, or buf itself when it is not packed.
+
+    A packed file has, within its first bytes, a u32 unpacked size and a u32 packed size, then an
+    LZ4 block that ends the file exactly (formats.md, "Packed body"). The head before those two
+    words is kept, so the result scans like a plain file.
+    """
+    for k in range(max(0, min(len(buf) - 8, 48))):
+        size, packed = _u32(buf, k), _u32(buf, k + 4)
+        if packed and packed == len(buf) - k - 8 and 0 < size <= UNPACK_LIMIT:
+            try:
+                return buf[:k] + lz4_block(buf[k + 8:], size)
+            except _Bad:
+                continue
+    return buf
+
+
 def count_file(path, game):
     """Count one file's commands into game; strict first, loose (and flagged) if strict finds none."""
-    buf = _read(path)
-    c, n = count_commands(buf)
+    raw = _read(path)
+    buf = unpack(raw)
+    extras = buf is not raw
+    if extras:
+        game["packedFiles"] += 1
+    c, n = count_commands(buf, extras=extras)
     if n == 0 and buf:
-        c, n = count_commands(buf, strict=False)
+        c, n = count_commands(buf, strict=False, extras=extras)
         if n:
             game["looseFiles"].append(os.path.basename(path))
     game["commandLists"] += n
@@ -221,15 +312,26 @@ def _find_ci(folder, name):
     return None
 
 
+def runtime_exes(root):
+    """The runtime's executables: Game.exe / GamePro.exe, else every .exe but Config.exe."""
+    named = [p for p in (_find_ci(root, e) for e in EXE_NAMES) if p]
+    if named:
+        return named
+    try:
+        return [os.path.join(root, e) for e in sorted(os.listdir(root))
+                if e.lower().endswith(".exe") and e.lower() not in NOT_RUNTIME]
+    except OSError:
+        return []
+
+
 def survey_game(root):
     game = {"path": root, "exe": {}, "archives": [], "unpacked": False, "refuse": [],
-            "encoding": None, "commands": {}, "commandLists": 0, "looseFiles": [], "errors": []}
-    for exe in EXE_NAMES:
-        p = _find_ci(root, exe)
-        if p:
-            game["exe"][exe] = pe_file_version(p)
+            "encoding": None, "commands": {}, "commandLists": 0, "packedFiles": 0,
+            "looseFiles": [], "errors": []}
+    for p in runtime_exes(root):
+        game["exe"][os.path.basename(p)] = pe_file_version(p)
     if any(_find_ci(root, m) for m in PRO_MARKERS):
-        game["refuse"].append("pro")
+        game["refuse"].append("pro-runtime")
     data_dir = _find_ci(root, "Data")
     archives = []
     for base in filter(None, [root, data_dir]):
@@ -248,6 +350,16 @@ def survey_game(root):
     basic = _find_ci(data_dir, "BasicData") if data_dir else None
     if basic:
         game["unpacked"] = True
+        try:
+            for entry in sorted(os.listdir(basic)):
+                if entry.lower().endswith(".dat"):
+                    with open(os.path.join(basic, entry), "rb") as f:
+                        head = f.read(2)
+                    if len(head) == 2 and head[1] == 0x50:
+                        game["refuse"].append("protected-data")
+                        break
+        except OSError as e:
+            game["errors"].append(f"{basic}: {e}")
         ce = _find_ci(basic, "CommonEvent.dat")
         if ce:
             try:
@@ -271,14 +383,16 @@ def survey_game(root):
 
 
 def is_game(folder):
-    if not any(_find_ci(folder, e) for e in EXE_NAMES):
-        return False
-    if _find_ci(folder, "Data") or _find_ci(folder, "Data.wolf"):
+    """Wolf project data is here: Data/BasicData/Game.dat, Data.wolf or Data/BasicData.wolf."""
+    if _find_ci(folder, "Data.wolf"):
         return True
-    try:
-        return any(e.lower().endswith(".wolf") for e in os.listdir(folder))
-    except OSError:
+    data = _find_ci(folder, "Data")
+    if not data or not os.path.isdir(data):
         return False
+    if _find_ci(data, "BasicData.wolf"):
+        return True
+    basic = _find_ci(data, "BasicData")
+    return bool(basic and os.path.isdir(basic) and _find_ci(basic, "Game.dat"))
 
 
 def find_games(top, max_depth):
@@ -310,7 +424,9 @@ def summarise(games):
         "engineVersions": dict(versions.most_common()),
         "unpacked": sum(1 for g in games if g["unpacked"]),
         "looseCounted": sum(1 for g in games if g["looseFiles"]),
-        "refused": {r: sum(1 for g in games if r in g["refuse"]) for r in ("pro",)},
+        "refused": {r: sum(1 for g in games if r in g["refuse"])
+                    for r in ("pro-runtime", "protected-data")},
+        "packedCounted": sum(1 for g in games if g.get("packedFiles")),
         "archiveHeads": {h: len(set(p)) for h, p in sorted(heads.items(), key=lambda kv: -len(kv[1]))},
         "commandsByUse": [{"code": int(k), "uses": total[k], "games": used_by[k]}
                           for k, _ in total.most_common()],
@@ -329,13 +445,16 @@ def main(argv=None):
             games.append(survey_game(root))
         except Exception as e:  # one unreadable game must not end the survey
             games.append({"path": root, "errors": [repr(e)], "commands": {}, "archives": [],
-                          "exe": {}, "unpacked": False, "refuse": [], "looseFiles": []})
+                          "exe": {}, "unpacked": False, "refuse": [], "looseFiles": [],
+                          "packedFiles": 0})
         print(f"{len(games):4d} {root}", file=sys.stderr)
     report = {"summary": summarise(games), "games": games}
     with open(a.out, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=1, ensure_ascii=False)
     s = report["summary"]
-    print(f"{s['games']} games, {s['unpacked']} unpacked, {s['refused']['pro']} Pro; "
+    print(f"{s['games']} games, {s['unpacked']} unpacked, "
+          f"{s['refused']['pro-runtime']} on the Pro runtime, "
+          f"{s['refused']['protected-data']} with protected data; "
           f"{len(s['commandsByUse'])} command codes seen; report in {a.out}")
     return 0
 
