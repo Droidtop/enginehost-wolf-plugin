@@ -9,6 +9,7 @@
 #include "wolf_commonrun.h"
 #include "wolf_decode.h"
 #include "wolf_files.h"
+#include "wolf_fonts.h"
 #include "wolf_mixer.h"
 
 #define STBI_NO_STDIO
@@ -38,6 +39,7 @@ struct wolf_frame {
     wolf_open_game *g;
     wolf_vm *vm;
     wolf_files *files;
+    wolf_fonts *fonts; /* the game's fonts, for text pictures */
     wolf_commonrun run;
     cached *cache;
     uint32_t ncache, capcache;
@@ -199,6 +201,10 @@ void wolf_frame_audio(wolf_frame *f, int16_t *out, uint32_t frames) {
     pthread_mutex_unlock(&f->audio_lock);
 }
 
+static const wolf_glyph *glyph(void *ctx, uint32_t font, uint32_t size, uint32_t cp) {
+    return wolf_fonts_glyph(((wolf_frame *)ctx)->fonts, font, size, cp);
+}
+
 wolf_frame *wolf_frame_start(const char *folder, wolf_open_game *g, wolf_vm *vm, uint32_t audio_rate) {
     wolf_frame *f = calloc(1, sizeof *f);
     if (!f) return NULL;
@@ -206,6 +212,7 @@ wolf_frame *wolf_frame_start(const char *folder, wolf_open_game *g, wolf_vm *vm,
     f->vm = vm;
     pthread_mutex_init(&f->audio_lock, NULL);
     f->files = wolf_files_open(folder);
+    f->fonts = wolf_fonts_open(folder, &g->game, vm);
     if (!f->files || wolf_commonrun_init(&f->run, vm, &g->commons) != WOLF_COMMONRUN_OK) {
         wolf_frame_stop(f);
         return NULL;
@@ -223,19 +230,20 @@ wolf_frame *wolf_frame_start(const char *folder, wolf_open_game *g, wolf_vm *vm,
 }
 
 void wolf_frame_run(wolf_frame *f) {
+    wolf_fonts_frame(f->fonts); /* between frames: no glyph is in use */
     wolf_commonrun_step(&f->run);
     wolf_vm_pictures_tick(f->vm);
 }
 
 void wolf_frame_quads(wolf_frame *f, wolf_quad_fn fn, void *ctx) {
-    wolf_render_source src = {f, image};
+    wolf_render_source src = {f, image, glyph};
     wolf_picture_quads(f->vm, &src, INT32_MIN, INT32_MAX, fn, ctx);
 }
 
 void wolf_frame_draw(wolf_frame *f, uint32_t *pixels) {
     uint32_t w = f->g->width, h = f->g->height;
     for (size_t i = 0; i < (size_t)w * h; i++) pixels[i] = 0xFF000000u;
-    wolf_render_source src = {f, image};
+    wolf_render_source src = {f, image, glyph};
     wolf_render_pictures(f->vm, &src, pixels, w, h, INT32_MIN, INT32_MAX);
 }
 
@@ -257,6 +265,7 @@ void wolf_frame_stop(wolf_frame *f) {
     wolf_commonrun_free(&f->run);
     cache_clear(f);
     free(f->cache);
+    wolf_fonts_close(f->fonts);
     wolf_files_close(f->files);
     free(f);
 }
