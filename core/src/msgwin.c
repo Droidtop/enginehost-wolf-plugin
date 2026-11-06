@@ -6,7 +6,7 @@
  * docs/behaviour/drawing.md, "The message window".
  *
  * It is a wolf_ui (vm.h) the core implements itself: ui.c shows a message or a choice list through
- * it as through a plugin's, and the player's keys (wolf_vm_input) answer.
+ * it as through a plugin's, and the player's keys (wolf_vm_input, keys.c) answer.
  */
 #include "vm_internal.h"
 #include "wolf_data.h"
@@ -34,8 +34,6 @@ struct wolf_window {
     int cancel;
     int32_t cursor;
     int32_t cx, cy;         /* Sys3, Sys4 at the time */
-    /* keys */
-    uint32_t keys;
     uint64_t frame;
 };
 
@@ -121,11 +119,9 @@ static void move(struct wolf_window *w, int step) {
     }
 }
 
-void wolf_vm_input(wolf_vm *vm, uint32_t keys) {
+void wolf_window_input(wolf_vm *vm) {
     struct wolf_window *w = vm->win;
-    if (!w) return;
-    uint32_t pressed = keys & ~w->keys;
-    w->keys = keys;
+    uint32_t pressed = vm->pressed, used = 0;
     w->frame++;
     if (w->text) {
         /* system variable 9: characters a second; 0 or less types out at once [M] */
@@ -134,6 +130,7 @@ void wolf_vm_input(wolf_vm *vm, uint32_t keys) {
         if (speed <= 0) w->shown = 1e9;
         else w->shown += speed / 60.0;
         if (pressed & WOLF_KEY_CONFIRM) {
+            used |= WOLF_KEY_CONFIRM;
             if (!typed && speed > 0) {
                 w->shown = 1e9; /* a key while typing shows the rest [M] */
             } else {
@@ -146,17 +143,21 @@ void wolf_vm_input(wolf_vm *vm, uint32_t keys) {
         }
     }
     if (w->count) {
+        used |= pressed & (WOLF_KEY_UP | WOLF_KEY_DOWN);
         if (pressed & WOLF_KEY_UP) move(w, -1);
         if (pressed & WOLF_KEY_DOWN) move(w, 1);
         if (pressed & WOLF_KEY_CONFIRM && shown_choice(w, w->cursor)) {
             int32_t picked = w->cursor;
+            used |= WOLF_KEY_CONFIRM;
             clear_choices(w);
             wolf_vm_choice_made(vm, picked);
         } else if (pressed & WOLF_KEY_CANCEL && w->cancel) {
+            used |= WOLF_KEY_CANCEL;
             clear_choices(w);
             wolf_vm_choice_made(vm, -1);
         }
     }
+    vm->pressed &= ~used; /* a press the window used does not also answer a 123 [M] */
 }
 
 /* ---- drawing ------------------------------------------------------------------------------ */

@@ -63,6 +63,7 @@ static void init_table(void) {
     table[212] = wolf_h_label;
     table[213] = wolf_h_jump;
     table[122] = wolf_h_set_string;
+    table[123] = wolf_h_key_input;
     table[250] = wolf_h_database;
     table[300] = wolf_h_call_by_name;
     table[401] = wolf_h_case;

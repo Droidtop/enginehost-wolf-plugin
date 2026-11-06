@@ -62,6 +62,7 @@ it keeps, so a list does not depend on the buffer it came from.
 | 401, 402, 420, 421, 499 | Case markers, else, cancel, branch end | [R] |
 | 250 | Database: read a field into a variable, or write one | manual 04ev_db, [D], [R] |
 | 122 | Set string: =, +=, lines, characters, remove, replace, up to, after | manual 04ev_string, [D] |
+| 123 | Key input: the basic keys, now or waiting for a press | manual 04ev_keyinput, [D], [R] |
 
 ## Call values (`core/src/values.c`)
 
@@ -439,11 +440,39 @@ mruby-wolf [R], checked on all 5,306 real commands [D]:
 - **Not built:** the SE delay and "stop also clears delayed SEs" from the manual, BGS
   channels, pan, loop start, MIDI keys, and saving the playing BGM/BGS.
 
+## Key input: 123 (`core/src/keys.c`)
+
+The player's keys come in once a frame through `wolf_vm_input` (confirm, cancel, sub and the four
+directions; the plugin maps the person's controls onto them). The core keeps what is held and
+what was newly pressed this frame. The built-in message window answers first and takes the
+presses it used, so the confirm that closes a message does not also answer a 123 in the same
+frame [M].
+
+What 123 does, from the manual (help/04ev_keyinput.html) [V], its layout read with mruby-wolf [R]
+and checked against the owner's games [D]:
+
+- **Numbers**: 0 the target the result goes into; 1 the options. A third number appears in the
+  forms that read one key of the keyboard or a pad by code (e.g. options 0x1180 with key 142,
+  74 uses [D]).
+- **Options, low byte**: bits 0-3 the directions that count (0 none, 1 all four, 7 up and down,
+  8 left and right); 0x10 confirm, 0x20 cancel, 0x40 sub; 0x80 wait until one is pressed [R].
+  The commonest real forms are 0x11 (153 uses), 0x91 (122) and 0x10 (50) [D].
+- **The result** is the manual's code: confirm 10, cancel 11, sub 12, a direction as the numeric
+  keypad (2 down, 4 left, 6 right, 8 up), 0 for none [V]. With several keys at once the first in
+  that order wins [M: the runtime's order is **Unknown**].
+- **Without the wait** the target gets what is held now [V]. **With it** the event waits for a
+  new press of one of the keys asked about [M: a key still held from before does not answer],
+  and that press answers only this wait [M].
+- **Unknown, logged once:** other direction sets (2-6, 9-15; read as all four), option bits above
+  the low byte (0x100, 0x200, 0x1000, 0x20000 appear in real commands [D]; the manual's other
+  modes, new-press-only, release-only and held-frames, are probably among them; read as the
+  basic form), and the key-code forms (not built: the target gets 0 and the event goes on).
+
 ## Not built yet
 
 The database operations
 beyond read and write (251, 252, 255-257), 211 (reserved calls), 1000 (24 uses in one 3.x game
 [D], one number and a `.jpg` path under `Save/` or `Data/`: by the strings, saving the screen to a
 picture file; Unknown), starting map event pages by the hero (automatic and parallel pages run: maps.md), string
-arguments, and everything that draws or reads input. A command
+arguments, and the input commands beyond 123. A command
 with no handler is logged once and skipped (above).

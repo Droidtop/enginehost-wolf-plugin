@@ -16,6 +16,7 @@ enum {
     ONCE_STRING_OP, ONCE_BAD_ARGS, ONCE_LABEL, ONCE_DB_MISSING, ONCE_DB_KIND, ONCE_DB_OP,
     ONCE_DB_NAME, ONCE_TEXT_XY, ONCE_TEXT_LONG, ONCE_STR_SOURCE, ONCE_STR_FILE, ONCE_STR_EXT,
     ONCE_UI_HEADLESS, ONCE_UI_EXTRA, ONCE_PIC_TRANSFORM, ONCE_PIC_LIMIT, ONCE_PIC_OP, ONCE_SOUND, ONCE_SOUND_DB, ONCE_TEXT_CODE, ONCE_TEXT_SJIS,
+    ONCE_KEY_DIRS, ONCE_KEY_KIND, ONCE_KEY_OPTION,
     ONCE_COUNT
 };
 
@@ -57,6 +58,10 @@ struct wolf_vm {
     struct wolf_window *win;     /* msgwin.c; NULL unless the built-in window is used */
     wolf_audio audio;            /* sound.c */
     int has_audio;
+
+    /* the player's keys (keys.c): held this frame, and newly pressed and not yet used */
+    uint32_t keys;
+    uint32_t pressed;
 };
 
 enum { UI_NONE, UI_MESSAGE, UI_CHOICES };
@@ -111,6 +116,10 @@ int wolf_h_stop_choices(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);   /* 10
 int wolf_h_stop_message(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);   /* 105 */
 int wolf_h_picture(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);        /* 150 */
 int wolf_h_sound(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);          /* 140 */
+int wolf_h_key_input(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);      /* 123 */
+/* The built-in window answers this frame's keys (msgwin.c), and clears from vm->pressed the
+ * presses it used. */
+void wolf_window_input(wolf_vm *vm);
 void wolf_pictures_free(wolf_vm *vm);
 void wolf_window_free(wolf_vm *vm);
 

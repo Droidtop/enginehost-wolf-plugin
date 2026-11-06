@@ -265,7 +265,8 @@ enum {
 };
 /* Use the built-in window (instead of a plugin UI or headless). */
 int wolf_vm_use_window(wolf_vm *vm);
-/* The keys held this frame (WOLF_KEY_*). Call once a frame, before the frame's events run. */
+/* The keys held this frame (WOLF_KEY_*), for the window and for 123 (key input). Call once a
+ * frame, before the frame's events run, with or without the built-in window. */
 void wolf_vm_input(wolf_vm *vm, uint32_t keys);
 /* The window's quads for a screen of width x height, drawn between pictures 0-99999 and 100000 up
  * (manual 04ev_picture.html). */

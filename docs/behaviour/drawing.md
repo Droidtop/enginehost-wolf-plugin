@@ -90,7 +90,8 @@ What each code does is from the manual, help/06specialword.html [V]:
 ## The message window (`core/src/msgwin.c`)
 
 The core answers 101 and 102 itself, through a `wolf_ui` of its own (`wolf_vm_use_window`). The
-player's keys come in once a frame (`wolf_vm_input`: confirm, cancel, sub, the four directions).
+player's keys come in once a frame (`wolf_vm_input`: confirm, cancel, sub, the four directions);
+a press the window uses does not also answer a key input command (commands.md, "Key input: 123").
 What the runtime draws, from the manual [V]:
 - **The window's background is the game's.** The FAQ: the text's place is set by the game's
   parallel common event "X[共]メッセージウィンドウ", and its frame is drawn with pictures. The
