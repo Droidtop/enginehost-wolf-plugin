@@ -9,7 +9,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 add_library(wolfcore STATIC src/dxa.c src/wolf_cmd.c src/vm.c src/values.c src/calc.c src/flow.c src/wolf_read.c
             src/wolf_data.c src/wolf_map.c src/wolf_maprun.c src/db.c
             src/text.c src/strings.c src/ui.c src/picture.c src/sound.c
-            src/render.c)
+            src/render.c src/wolf_commonrun.c)
 target_link_libraries(wolfcore PRIVATE m)
 target_include_directories(wolfcore PUBLIC src)
 target_compile_options(wolfcore PRIVATE -Wall -Wextra -Werror)
@@ -60,4 +60,8 @@ if(NOT ANDROID)
   target_link_libraries(test_render PRIVATE wolfcore)
   target_compile_options(test_render PRIVATE -Wall -Wextra -Werror)
   add_test(NAME render COMMAND test_render)
+  add_executable(test_commonrun test/test_commonrun.c)
+  target_link_libraries(test_commonrun PRIVATE wolfcore)
+  target_compile_options(test_commonrun PRIVATE -Wall -Wextra -Werror)
+  add_test(NAME commonrun COMMAND test_commonrun)
 endif()

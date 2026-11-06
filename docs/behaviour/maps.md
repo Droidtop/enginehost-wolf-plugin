@@ -79,9 +79,31 @@ Each step is one frame of the interpreter, under the dispatcher's rules (command
   (`WOLF_MAPRUN_E_BUSY`); the move command is not built, and will have to take effect between
   frames.
 
+## Common events that start by themselves (`core/src/wolf_commonrun.c`)
+
+From the editor's manual, help/02commonev.html [V], unless marked:
+- **Run conditions:** called only (never starts by itself); automatic (runs while its condition
+  holds, and "while it runs, no other event starts"); parallel (runs while its condition holds,
+  "other events still start"); always parallel (runs regardless of its condition).
+- **The condition** is the event's variable compared with its value. The comparison number is
+  read with 111's numbering (commands.md) [M: the same table the page conditions use].
+- **A parallel run is cut off** as soon as its condition stops holding, even mid-event [V]. The
+  manual adds that commands that never wait still run on in that frame as a speed side effect;
+  the core cuts at the frame's start [M]. An automatic run carries on to its end [M: the manual
+  names the cut-off only for parallel].
+- **Restart:** a run that ends starts again on the next frame while its condition holds [M, as
+  for automatic map pages].
+- **Blocking:** while an automatic common event runs, no other automatic one starts
+  (`wolf_commonrun_blocking`). The plugin also holds map pages back then. Parallel ones still
+  start and run [M: the manual's "no other event starts" is read as non-parallel events].
+- **Map change** [V]: every run stops, and each starts again from the top when its condition
+  holds. A run that failed (an infinite loop or a call nested too deep) is not started again
+  until then, logged.
+- **Order:** once a frame, in file order, before the map's events [R: the reference runs them
+  first].
+
 ## Not built yet
 
-Hero position and movement, event movement and routes, the checked and touch triggers,
-common events that start by themselves (automatic and parallel common events: the reference
-runs them before the map's events each frame), and drawing. Pages' graphics, directions and
+Hero position and movement, event movement and routes, the checked and touch triggers, and
+drawing the map. Pages' graphics, directions and
 options are loaded (formats.md) but unused.
