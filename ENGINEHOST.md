@@ -8,23 +8,37 @@ that builds a bundle.
 
 ## What the wrapper is
 
-- `WolfPlugin` (`app/src/main/java/dev/enginehost/plugin/wolf/`): a step-driven `EnginePlugin`
-  that runs only in Enginehost's isolated runtime (`isolatable`, Enginehost
-  `docs/engine-sandbox.md`). The host calls `step()` once a frame and draws the pixels it fills.
-- `app/src/main/cpp/`: `wolf_open.c` finds and loads a game's project data with the core's
-  loaders; `wolf_enginehost.c` is the JNI side, bound by `enginehost_register_natives`. One
-  library, `libwolfrpg.so`, for arm64-v8a and x86_64, with the core linked in statically.
+- `WolfPlugin` (`app/src/main/java/dev/enginehost/plugin/wolf/`) runs two ways
+  (Droidtop/tracker#858, comment 6691411927):
+  - **with a display**, in Enginehost's runtime process under allocate-then-clamp, as the other GL
+    cores run: a `GLSurfaceView` in the display, whose GL thread runs the game's 60 fps frames and
+    draws them with GLES 2 (`wolf_gl.c`); sound goes out through AAudio (`wolf_aaudio.c`). The
+    bundle therefore does not declare `isolatable`. When the Fibrewall GPU proxy's Android build
+    lands (#815), GL moves into the isolated process and the bundle declares it again;
+  - **isolated, step-driven**, the fallback: the host calls `step()` once a frame and draws the
+    pixels the core's software renderer fills; sound goes into the host's audio ring.
+- `app/src/main/cpp/`:
+  - `wolf_open.c` finds and loads a game's project data with the core's loaders;
+  - `wolf_files.c` finds the files commands name (loose first, then archives);
+  - `wolf_frame.c` runs the frames and decodes images and sounds;
+  - `wolf_enginehost.c` is the JNI side. It's bound by `JNI_OnLoad` in the runtime process, and by
+    `enginehost_register_natives` when isolated.
+
+  One library, `libwolfrpg.so`, for arm64-v8a and x86_64, with the core linked in statically.
 - Enginehost's `plugin-native/` (the file layer and the audio ring) is not kept here: the
   workflow's plugin-api action checks it out into `build/enginehost/` at the pinned Enginehost
-  commit (Droidtop/tracker#921 item 17). Every libc file call in the library goes through the
-  host's broker, so the core reads only the game folder it is handed. The bundle does not write the game folder yet (`writesGameFolder: false`).
+  commit (Droidtop/tracker#921 item 17). Isolated, every libc file call goes through the host's
+  broker, so the core reads only the game folder it is handed. In the runtime process the same
+  calls go straight to libc, under the clamp. The core never writes the game folder
+  (`writesGameFolder: false`).
 
-## What it does now (first milestone, Droidtop/tracker#858)
+## What it does now (Droidtop/tracker#858)
 
 On start it opens the game folder and loads Game.dat, CommonEvent.dat and the three databases,
 from `Data/BasicData` (unpacked) or from `Data.wolf` / `Data/BasicData.wolf` (3.x archives opened
-with the library's default key string), and logs what each held under the logcat tag `wolf`.
-Each step is a black frame of the game's screen size; the interpreter does not run yet.
+with the library's default key string), and logs what each held under the logcat tag `wolf`. Each
+frame runs the self-starting common events and draws the pictures; sound plays. Messages and
+choices are headless for now (logged; a choice takes its first entry), and the map is not run yet.
 
 It ends the launch with a plain reason (`host.fail`) for:
 - a Pro game (`GamePro.exe`) or protected data (Pro, or the 2.x editor's scrambler);

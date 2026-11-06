@@ -2,7 +2,7 @@
   "upstream": {
     "repo": "Droidtop/enginehost-wolf-plugin",
     "ref": "creation",
-    "commit": "9014bf10e75a0be669cf7a0e0ca4169648249dcd"
+    "commit": "236d7f8d8afa03396d42bb7c576a8f02d688bfb1"
   },
   "version": "0.1"
 }
