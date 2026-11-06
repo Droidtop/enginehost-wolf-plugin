@@ -57,7 +57,7 @@ static wolf_map_page page(uint8_t trigger, wolf_list list) {
 }
 
 static wolf_vm *make_vm(void) {
-    wolf_config cfg = {64, 4, 4, 64, 4, 16, 1};
+    wolf_config cfg = {64, 4, 4, 64, 4, 16, 1, 0};
     wolf_host host = {NULL, on_log};
     return wolf_vm_create(&host, &cfg);
 }

@@ -445,7 +445,6 @@ void wolf_game_screen(const wolf_game *g, uint32_t *width, uint32_t *height) {
 }
 
 void wolf_game_config(const wolf_game *g, wolf_config *cfg) {
-    (void)g;
     memset(cfg, 0, sizeof *cfg);
     /* Unknown in the data (formats.md, "Game.dat"): fixed defaults until it is read. */
     cfg->normal = 100000u;
@@ -455,6 +454,7 @@ void wolf_game_config(const wolf_game *g, wolf_config *cfg) {
     cfg->system_strings = 10000u;
     cfg->map_events = 10000u;
     cfg->seed = 1u;
+    cfg->shift_jis = g && !g->utf8 ? 1u : 0u; /* Game.dat's own marker; UTF-8 without one */
 }
 
 /* ---- TileSetData.dat --------------------------------------------------------------------- */

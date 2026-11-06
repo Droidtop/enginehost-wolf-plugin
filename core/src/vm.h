@@ -87,6 +87,7 @@ typedef struct {
     uint32_t system_strings; /* 9,900,000 + X */
     uint32_t map_events;   /* map events whose self variables are kept */
     uint32_t seed;         /* random seed (saves carry it) */
+    uint32_t shift_jis;    /* 1: the game's text is Shift-JIS (2.x); 0: UTF-8 (3.x) */
 } wolf_config;
 
 typedef struct wolf_vm wolf_vm;

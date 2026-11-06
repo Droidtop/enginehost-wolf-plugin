@@ -14,7 +14,8 @@
 enum {
     ONCE_DB, ONCE_CHARA, ONCE_RANGE_1500000, ONCE_MAP_EVENT_CALL, ONCE_NAME_ESCAPE,
     ONCE_STRING_OP, ONCE_BAD_ARGS, ONCE_LABEL, ONCE_DB_MISSING, ONCE_DB_KIND, ONCE_DB_OP,
-    ONCE_DB_NAME, ONCE_COUNT
+    ONCE_DB_NAME, ONCE_TEXT_XY, ONCE_TEXT_LONG, ONCE_STR_SOURCE, ONCE_STR_FILE, ONCE_STR_EXT,
+    ONCE_COUNT
 };
 
 struct wolf_vm {
@@ -84,6 +85,17 @@ int wolf_h_jump(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);           /* 21
 int wolf_h_call(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);           /* 210 */
 int wolf_h_call_by_name(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);   /* 300 */
 int wolf_h_database(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);       /* 250 */
+int wolf_h_set_string(wolf_vm *vm, wolf_thread *t, const wolf_cmd *c);     /* 122 */
+
+/* Text (text.c). The longest text the core builds; longer results are cut there, logged once. */
+#define WOLF_TEXT_MAX (4u << 20)
+/* A copy of src with the substitution codes (\v[], \s[], \cself[], \cdb[]...) replaced, in the
+ * manual's order (06specialword.html); other codes are left for whoever shows the text. NULL
+ * when out of memory. The caller frees it. */
+char *wolf_expand(wolf_vm *vm, const wolf_thread *t, const char *src);
+/* The length in bytes of the character at s: one game character in the game's encoding, or a
+ * whole display code such as "\c[1]" (122's one-character cuts, 04ev_string.html). */
+size_t wolf_char_len(const wolf_vm *vm, const char *s);
 
 /* Called by the loop when a list ends, to hand back a common event's result. */
 void wolf_return(wolf_vm *vm, wolf_thread *t);

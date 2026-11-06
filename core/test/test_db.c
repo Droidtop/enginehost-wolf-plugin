@@ -3,6 +3,7 @@
 #include "../src/vm.h"
 #include "../src/wolf_cmd.h"
 #include "../src/wolf_data.h"
+#include "../src/vm_internal.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -86,7 +87,7 @@ static int make_db(wolf_db *db, int32_t base) {
     return r;
 }
 
-static const wolf_config CFG = {100, 10, 20, 20, 20, 4, 1};
+static const wolf_config CFG = {100, 10, 20, 20, 20, 4, 1, 0};
 
 typedef struct {
     wolf_vm *vm;
@@ -277,7 +278,31 @@ static void test_refusals(void) {
     world_close(&w);
 }
 
+static void test_text_codes(void) {
+    world w;
+    world_open(&w);
+    struct { const char *src, *want; } cases[] = {
+        {"\\udb[0:0:0]", "10"},           /* a number field */
+        {"\\cdb[0:1:1]", "Ether"},        /* a text field */
+        {"\\sdb[1:0:0]", "130"},
+        {"\\cdb[0:1]", "Ether"},          /* two numbers: the data's name */
+        {"\\udb[1]", "Spare"},            /* one number: the type's name */
+        {"\\udb[0:\\v[0]:2]", "11"},      /* a variable inside (V0 is 0) */
+        {"\\udb[9:0:0]|\\udb[0:9:0]|", "||"}, /* missing type or data: empty */
+        {"\\udb[0:-1:0]", "\\udb[0:-1:0]"},   /* negative: left as written */
+        {"\\udb[0:0:0:0]", "\\udb[0:0:0:0]"}, /* four numbers: left */
+    };
+    for (unsigned i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        char *got = wolf_expand(w.vm, NULL, cases[i].src);
+        CHECK(got && strcmp(got, cases[i].want) == 0);
+        if (got && strcmp(got, cases[i].want) != 0) fprintf(stderr, "  %s -> %s\n", cases[i].src, got);
+        free(got);
+    }
+    world_close(&w);
+}
+
 int main(void) {
+    test_text_codes();
     test_call_values();
     test_read_write();
     test_overflow_and_names();

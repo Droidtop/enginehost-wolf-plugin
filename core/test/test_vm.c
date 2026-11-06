@@ -108,7 +108,7 @@ static void test_parse(void) {
     free(b.p);
 }
 
-static const wolf_config small = {100, 0, 10, 0, 0, 0, 1};
+static const wolf_config small = {100, 0, 10, 0, 0, 0, 1, 0};
 
 static void test_dispatch(void) {
     wolf_host host = {NULL, on_log};

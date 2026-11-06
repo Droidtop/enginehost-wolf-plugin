@@ -7,7 +7,8 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
 add_library(wolfcore STATIC src/dxa.c src/wolf_cmd.c src/vm.c src/values.c src/calc.c src/flow.c src/wolf_read.c
-            src/wolf_data.c src/wolf_map.c src/wolf_maprun.c src/db.c)
+            src/wolf_data.c src/wolf_map.c src/wolf_maprun.c src/db.c
+            src/text.c src/strings.c)
 target_link_libraries(wolfcore PRIVATE m)
 target_include_directories(wolfcore PUBLIC src)
 target_compile_options(wolfcore PRIVATE -Wall -Wextra -Werror)
@@ -38,4 +39,8 @@ if(NOT ANDROID)
   target_link_libraries(test_db PRIVATE wolfcore)
   target_compile_options(test_db PRIVATE -Wall -Wextra -Werror)
   add_test(NAME db COMMAND test_db)
+  add_executable(test_strings test/test_strings.c)
+  target_link_libraries(test_strings PRIVATE wolfcore)
+  target_compile_options(test_strings PRIVATE -Wall -Wextra -Werror)
+  add_test(NAME strings COMMAND test_strings)
 endif()

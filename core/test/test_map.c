@@ -170,7 +170,7 @@ static void check_map(const wolf_map *m, uint32_t version, int notiles) {
 
 /* A loaded page runs on a thread with its event's self variables. */
 static void check_run(const wolf_map *m) {
-    wolf_config cfg = {16, 16, 16, 16, 16, 0, 1};
+    wolf_config cfg = {16, 16, 16, 16, 16, 0, 1, 0};
     wolf_thread *t = calloc(1, sizeof *t);
     CHECK(wolf_map_start_page(t, m, &cfg, 1, 0) == -1); /* no self slots yet */
     wolf_map_config(m, &cfg);

@@ -57,6 +57,7 @@ it keeps, so a list does not depend on the buffer it came from.
 | 212, 213 | Label, jump to label | [R] |
 | 401, 402, 420, 421, 499 | Case markers, else, cancel, branch end | [R] |
 | 250 | Database: read a field into a variable, or write one | manual 04ev_db, [D], [R] |
+| 122 | Set string: =, +=, lines, characters, remove, replace, up to, after | manual 04ev_string, [D] |
 
 ## Call values (`core/src/values.c`)
 
@@ -224,6 +225,89 @@ their meaning is settled from the manual and a comparison run:
 The CSV paths are game-relative and use `\cself[]`/`\sys[]` escapes. The manual refuses
 `//`, `\\`, `..`, `./`, `.\`, `%`, `:`, `*`, `?`, `"`, `<`, `>` and `|` in them (Ver 3.00 on),
 and the core will apply that rule to every file name a command gives (risks.md).
+
+## Text: the substitution codes (`core/src/text.c`)
+
+From the manual, help/06specialword.html [V]. Text in commands (122's text, and later messages
+and string pictures) can hold codes that stand for a value:
+
+| Code | Stands for |
+|---|---|
+| `\v[X]`, `\v1[X]` to `\v9[X]` | normal variable X; spare variable block 1-9, X |
+| `\self[X]` | this map event's self variable X |
+| `\cself[X]` | this common event's self variable X (5-9 are texts) |
+| `\sys[X]`, `\sysS[X]` | system variable X; system string X |
+| `\udb[A:B:C]`, `\cdb[...]`, `\sdb[...]` | user, changeable, system database: type A, data B, field C; `[A:B]` the data's name; `[A]` the type's name |
+| `\s[X]` | string variable X |
+
+- **Order** [V]: the manual ranks them `\v` < `\v?` < `\self` < `\cself` < `\sys` < `\udb` <
+  `\cdb` < `\sdb` < `\s` < `\sysS`, and a code's brackets may hold any code ranked below it.
+  So `\cself[\v[12]]` works, and `\v[\cself[2]]` does not (the manual: "not processed
+  normally"). The core does one pass per code in that order. Each pass replaces every code
+  whose brackets hold only a number (for the databases, up to three joined by `:`). By the time
+  a code's pass comes, any lower code inside its brackets has already been replaced. A code
+  whose brackets hold anything else is left as written; that's what happens to
+  `\v[\cself[2]]` [M: what the runtime shows for it is **Unknown**].
+- Up to 100 levels of nesting work from 3.50 on [V]. The pass order covers any depth.
+- `\\` is a backslash, never the start of a code. It is left as `\\` for whoever shows the text
+  [M]. Display codes (`\c[]`, `\f[]`, `\!`, `\r[,]`, `\i[]`, ...) are left for messages and string
+  pictures.
+- A value put in by one pass is not read again by the same pass. A later pass may still find
+  codes inside a string variable's value [M: whether the runtime re-reads replaced text is
+  **Unknown**].
+- A database code naming a type or data the database lacks gives "" [M]. A negative number, or
+  more than three, leaves the code as written.
+- **Not built:** `\xy[]` and `\xyN[]` (XY arrays). Left as written, logged once.
+- Results are capped at 4 MB and cut there, logged once [M: a safety cap].
+
+## Set string: 122 (`core/src/strings.c`)
+
+What each assignment does is from the manual, help/04ev_string.html [V]. The argument layout was
+read from all 3,447 commands 122 in the survey games [D] (the reference only models plain
+assignment):
+
+- Numbers: the target (a string call value), a packed word, and, for a variable source, the
+  string variable to read. Real commands have 2, 3 or 4 numbers and 0, 1 or 2 texts [D].
+- The packed word's low four bits are the source [D]: 0 the command's first text, with its
+  codes replaced (above); 1 a string variable (third number); 2 a variable holding a string call
+  value (third number, "ロード位置を変数で指定"); 3 keyboard input (the third number is the
+  length, 30 and 10 in real commands).
+- Bit 4 (0x10): the target itself is held by a variable ("代入先を変数で指定") [D, matches the
+  manual's option].
+- The second byte is the assignment [D, numbering matched to the manual's list by what the
+  real texts are]:
+
+| Assignment | Does | Real texts that fix it [D] |
+|---|---|---|
+| 0 = | target = right side | the 2,329 plain texts |
+| 1 += | target = target joined with the right side | |
+| 2 copy top line | target = the right side's first line | from string variables only |
+| 3 cut top line | as 2, and a variable right side loses that line and its line break | |
+| 4 cut one character | target = the right side's first character; a variable right side loses it | |
+| 5, 6, 7 | read a file, write a file, list a folder | `Data/…/info.ini`, `…_改行調整.txt`, `Data/改変テキスト/` |
+| 8 remove all | every occurrence of the right side removed from the target | `Data/` taken out of paths |
+| 9 replace | every occurrence of the first text replaced by the second, in the target | `\n` → a line break |
+| 10 up to | target = what comes before the right side; `<<NotFound>>` when absent | |
+| 11 after | target = what comes after the right side; `<<NotFound>>` when absent | |
+
+- A line ends at `\n` or `\r\n` [M]. "One character" is one character of the game's encoding
+  (UTF-8 for 3.x, Shift-JIS for 2.x, from Game.dat's marker), or one whole display code: the
+  manual's `\A+` and `\c[1]` go in one cut, and of `\r[text,ruby]` only `\r[` goes [V].
+- A text right side is only read, never cut [V: the manual cuts "the right side" only when it
+  is a variable].
+- 10 and 11 are matched to the manual's "から指定文字まで切り出し" and
+  "の指定文字以降を切り出し" by list order. A real `[\cself[1]]:` under 10 fits "up to" [M].
+- In 9 the second text has its codes replaced too [M].
+- **Not built, logged once and skipped** (the list carries on):
+  - keyboard input (source 3);
+  - the file assignments 5-7. They need the file rules in risks.md first: game folder only, the
+    manual's refused sequences, and writes to the save directory only;
+  - the forms with a third byte (4 in all real cases [D]). These carry the regular-expression
+    texts and the `<<…>>` hidden codes (help/04ev_string_specialcode.html), and the meaning of
+    each assignment number under that byte is **Unknown** until a comparison run;
+  - assignments past 11. The manual's newer entries (cut the last character, cut up to with
+    the rest kept, Base64, remove display codes) must be among them; their numbers are
+    **Unknown**.
 
 ## Not built yet
 
